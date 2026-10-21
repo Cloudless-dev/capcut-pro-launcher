@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>CapCut Launcher for macOS</title>
+    <link>https://github.com/Cloudless-dev/capcut-pro-launcher</link>
+    <description>Signed updates for the Apple Silicon macOS launcher.</description>
+    <language>en</language>
+    <item>
+      <title>CapCut Launcher 0.2.0</title>
+      <pubDate>Thu, 22 Oct 2026 07:07:36 +0000</pubDate>
+      <description>Profiles, browser sign-in, region selection, Russian/English interface, and system/light/dark themes. Requires macOS 14+ on Apple Silicon.</description>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Cloudless-dev/capcut-pro-launcher/releases/download/macos-v0.2.0/CapCut-Launcher-0.2.0-macOS-arm64.zip" length="214120167" type="application/octet-stream" sparkle:edSignature="ocCLdfnCZhS+pBs+i+iDW93Yri+hR/tLR/f21GvTcyNStrJuWOgcOEOIU9Q8px2LTB9kOSlHF+VOkBD05KYXDQ==" sparkle:version="3" sparkle:shortVersionString="0.2.0" sparkle:os="macos" />
+    </item>
+  </channel>
+</rss>

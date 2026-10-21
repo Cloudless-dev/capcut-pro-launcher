@@ -1,37 +1,33 @@
 # CapCut Launcher
 
-[Скачать v0.02 для Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
+Вход через браузер, сохранённые профили и выбор региона CapCut. Интерфейс на русском и английском.
 
-Лаунчер для CapCut: вход через email в браузере, сохранение аккаунта и выбор региона интерфейса US / NL. Интерфейс на русском и английском.
+- [Скачать для Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
+- [Скачать для macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.2.0) — macOS 14+, Apple Silicon (M-серия). Intel пока не поддерживается.
 
 ## Установка
 
-1. Установите CapCut и закройте его.
-2. Скачайте ZIP из раздела Releases и распакуйте целиком.
-3. Запустите **CapCut Launcher.exe**.
-4. Проверьте путь к CapCut, выберите регион и нажмите **Войти через email**.
-5. В дальнейшем запускайте CapCut через лаунчер.
+Сначала установите официальный CapCut и закройте его.
 
-Для обновления нажмите на номер версии в правом верхнем углу. Инструкция доступна в приложении и в архиве.
+**Windows:** распакуйте ZIP целиком и запустите `CapCut Launcher.exe`.
 
-Проверено на Windows 11 Pro 25H2, сборка 26200.9711, и CapCut 9.6.0.4097. Сборка для Windows x64. Версии для macOS пока нет.
+**macOS:** откройте DMG и перенесите `CapCut Launcher.app` в «Программы».
 
-Показ Pro-эффектов не заменяет подписку. Для платных функций нужна действующая подписка CapCut.
+Если macOS блокирует запуск, попробуйте открыть приложение, затем перейдите в **Системные настройки → Конфиденциальность и безопасность → Всё равно открыть**.
 
-Неофициальный проект. Используйте на свой страх и риск. Автор не отвечает за потерю данных, ограничения аккаунта и другие последствия. Сохраните копии важных проектов.
+Добавьте профиль, войдите через браузер, выберите регион и запустите CapCut. [Подробнее о версии для Mac](macos/README.md).
+
+Для платных функций нужна действующая подписка CapCut.
 
 ## English
 
-[Download v0.02 for Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
+Browser sign-in, saved profiles and CapCut region selection. Russian and English interface.
 
-CapCut launcher with browser email sign-in, saved accounts and US / NL interface regions. Russian and English interface.
+- [Download for Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
+- [Download for macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.2.0) — macOS 14+, Apple Silicon. No Intel build yet.
 
-1. Install CapCut and close it.
-2. Download the ZIP from Releases and extract the entire folder.
-3. Open **CapCut Launcher.exe**.
-4. Check the CapCut path, choose a region and select **Sign in with email**.
-5. Use the launcher for later launches.
+Install the official CapCut app first. On Windows, extract the ZIP and run `CapCut Launcher.exe`. On Mac, open the DMG and drag the app to Applications. Sign in through the browser, choose a region and launch CapCut.
 
-Click the version in the upper-right corner to check for updates. Help is available inside the app and in the archive. Tested on Windows 11 Pro 25H2, build 26200.9711, with CapCut 9.6.0.4097. Windows x64 only; no macOS release yet.
+If macOS blocks the app, try opening it, then go to **System Settings → Privacy & Security → Open Anyway**.
 
-Pro features require a valid CapCut subscription. This is an unofficial project. Use at your own risk; the author is not responsible for data loss, account restrictions or other consequences. Back up important projects.
+Paid features require a valid CapCut subscription.

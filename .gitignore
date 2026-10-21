@@ -6,3 +6,15 @@ __pycache__/
 *.log
 *.jsonl
 .env*
+
+# Local archives, account data, developer runtimes and release outputs
+/_local/
+/.venv/
+/.DS_Store
+/releases/
+/macos/vendor
+/macos/build
+/macos/.venv/
+/macos/Runtime/LauncherBridge.dylib
+*.dmg
+*.zip

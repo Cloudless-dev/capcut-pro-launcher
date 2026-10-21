@@ -1,6 +1,6 @@
-local/
-runtime/
-dist/
+/local/
+/runtime/
+/dist/
 __pycache__/
 *.pyc
 *.log

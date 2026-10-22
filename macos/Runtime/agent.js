@@ -4,6 +4,7 @@ const cfg = globalThis.LAUNCH_CONFIG;
 const target = cfg.region.toLowerCase();
 if (!/^[a-z]{2}$/.test(target)) throw new Error('Invalid country code');
 const tracked = new Map(), callbacks = new Set();
+let nativeAuthActive = !!cfg.nativeAuth;
 let sessionActive = !!cfg.session, profileSeen = false, regionReads = 0;
 const emit = (kind, fields = {}) => send({kind, ...fields});
 const safeDomain = h => /(^|\.)(capcutapi\.com|capcutapi\.us)$/.test(h);
@@ -28,6 +29,27 @@ function regionHeadersAllowed(raw) {
     !/[?&](?:sign|signature|x-bogus|x-signature|x-amz-signature|x-goog-signature)=/i.test(raw.split('#')[0]);
 }
 const regionHeaderNames = new Set(['store-country-code', 'x-tt-store-region', 'x-tt-region']);
+function nativeAccountURL(raw, host) {
+  if (!['passport-api-sg.capcutapi.com','passport16-normal-us-ttp.capcutapi.us'].includes(host)) return raw;
+  const m=/^https:\/\/([a-z0-9.-]+)(?::443)?(\/passport\/(?:account\/info|token\/beat)\/v2\/[^#]*)$/i.exec(raw);
+  return m && safeDomain(m[1].toLowerCase()) ? 'https://'+host+m[2] : raw;
+}
+function accountIdentity(result) {
+  const user=result.data||{},uid=user.user_id_str??user.user_id??user.uid;
+  const success=(result.message==='success'||String(result.ret)==='0') && /^\d+$/.test(String(uid)) && String(uid)!=='0';
+  const code=user.error_code??result.error_code??result.ret??result.code;
+  let displayName='';
+  if(success) {
+    displayName=['email','email_address','name','nick_name','screen_name'].map(k=>user[k])
+      .find(v=>typeof v==='string'&&v.trim()) || 'user'+uid;
+    displayName=displayName.trim().slice(0,120);
+    if(displayName.includes('@')) {
+      const [local,...domain]=displayName.split('@');
+      if(!local.includes('*'))displayName=local.slice(0,2)+'***@'+domain.join('@');
+    }
+  }
+  return {success,expired:!success&&String(code)==='13',displayName};
+}
 const cf = Process.getModuleByName('CoreFoundation');
 const cfFn = (n, r, a) => new NativeFunction(cf.getExportByName(n), r, a);
 const makeCF = cfFn('CFStringCreateWithCString','pointer',['pointer','pointer','uint']);
@@ -47,6 +69,7 @@ function cfString(p) {
 function createCF(s) { return makeCF(ptr(0),Memory.allocUtf8String(s),0x08000100); }
 const regionCF = createCF(target);
 const profileCF = cfg.profileBase64 ? createCF(cfg.profileBase64) : null;
+const nativeProfileCF = cfg.nativeAuth && cfg.nativeAuth.profileBase64 ? createCF(cfg.nativeAuth.profileBase64) : null;
 const domainOK = d => /capcut|lemon|bytedance/i.test(d);
 const regionKey = k => /(?:^|[./])store_region_of_(uid|did)$/i.test(k);
 const accountKey = k => /(?:^|[./])Account[./]user_info$/i.test(k);
@@ -72,7 +95,14 @@ Interceptor.attach(prefGet, {
     } else if (accountKey(this.key)) {
       profileSeen = true;
       emit('account_preference',{key:this.key,domain:this.domain,present:!ret.isNull()});
-      if (profileCF && sessionActive) {
+      if (nativeProfileCF && nativeAuthActive) {
+        // Read the exact official-login snapshot selected at launch, rather than
+        // an older preferences cache in the CapCut process. Do not persist it
+        // here: CapCut owns its native account, login and logout writes.
+        if (!ret.isNull()) release(ret);
+        ret.replace(retain(nativeProfileCF));
+        emit('native_profile_loaded');
+      } else if (profileCF && sessionActive) {
         // The caller explicitly selected this authenticated account in the launcher.
         prefSet(this.args[0],profileCF,this.args[1],this.args[2],this.args[3]);
         prefSync(this.args[1],this.args[2],this.args[3]);
@@ -124,7 +154,7 @@ Process.attachModuleObserver({onAdded(module) {
         const m=/^https:\/\/([a-z0-9.-]+)(?::443)?\//i.exec(url);
         if (!m || !safeDomain(m[1].toLowerCase())) return;
         if (/\/passport\/(?:web\/)?logout(?:[/?]|$)/.test(url)) {
-          sessionActive=false;emit('session_logout');return;
+          sessionActive=false;nativeAuthActive=false;emit('session_logout');return;
         }
         const changed=regionURL(url,target.toUpperCase());
         if(changed!==url) {
@@ -145,6 +175,13 @@ Process.attachModuleObserver({onAdded(module) {
         if (catalog) {
           const r=/(?:[?&])(?:region|store_region)=([^&]*)/i.exec(url);
           emit('catalog_request',{region:r?decodeURIComponent(r[1]):null,path:url.split('?')[0].replace(/^https:\/\/[^/]+/,'')});
+        }
+        const nativeCheck=cfg.nativeAuth ? nativeAccountURL(url,cfg.nativeAuth.sourceHost) : url;
+        if (cfg.nativeAuth && nativeAuthActive && nativeCheck !== url) {
+          const auth=cfg.nativeAuth;
+          this.url=Memory.allocUtf8String(nativeCheck);
+          a[2]=this.url;clear(a[3]);put(a[3],'sdk-version','2');put(a[3],'user-agent',cfg.userAgent);
+          put(a[3],'x-tt-token',auth.xToken);put(a[3],'x-tt-passport-csrf-token',auth.csrfToken);
         }
         let kind='';
         if (/\/passport\/account\/info\/v2\//.test(url)) {
@@ -188,10 +225,14 @@ Process.attachModuleObserver({onAdded(module) {
       if(!r||r.kind!=='account')return;
       try {
         const bytes=r.chunks.flat();const text=decodeURIComponent(bytes.map(b=>'%'+b.toString(16).padStart(2,'0')).join(''));
-        const result=JSON.parse(text);const ok=result.message==='success'||String(result.ret)==='0';
-        const errorCode=result.data?.error_code ?? result.error_code ?? result.ret ?? result.code;
-        emit('account_verified',{success:ok,expired:!ok && String(errorCode)==='13'});
-        if(!ok)sessionActive=false;
+        const identity=accountIdentity(JSON.parse(text));
+        if (cfg.nativeAuth && identity.success) {
+          const user=JSON.parse(text).data||{};
+          identity.accountMatches=String(user.user_id_str??user.user_id??user.uid)===String(cfg.nativeAuth.uid);
+          if(!identity.accountMatches){identity.success=false;identity.expired=false;}
+        }
+        emit('account_verified',identity);
+        if(!identity.success){sessionActive=false;nativeAuthActive=false;}
       } catch(_){emit('account_check_failed');}
     }});
   }});

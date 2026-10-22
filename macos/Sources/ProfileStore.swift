@@ -1,5 +1,8 @@
 import Foundation
 
+enum ProfileSignInMethod: String, Codable, CaseIterable {
+    case launcher, capcut
+}
 enum ProfileAuthState: String, Codable {
     case signedOut, saved, valid, expired, needsLogin
     var title: String {
@@ -21,6 +24,8 @@ struct LauncherProfile: Codable, Identifiable, Equatable {
     var lastVerified: Date?
     // Optional for compatibility with profiles created before automatic sign-in.
     var automaticSignIn: Bool?
+    var signInMethod: ProfileSignInMethod?
+    var usesCapCutAccount: Bool { signInMethod == .capcut }
     init(id: String = UUID().uuidString, name: String, region: String = "US") {
         self.id = id; self.name = name; self.region = region
     }

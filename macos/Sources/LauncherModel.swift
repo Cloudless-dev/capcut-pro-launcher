@@ -21,9 +21,13 @@ final class LauncherModel: ObservableObject {
     @Published var profilePasswordDraft = ""
     @Published var profileAutomaticDraft = true
     @Published var profileHasPassword = false
+    @Published var profileMethodDraft: ProfileSignInMethod = .launcher
+    @Published var profileRegionDraft = "US"
     @Published var editorError = ""
     let state: URL
     let store: ProfileStore
+    let nativeAccounts: NativeAccountStore
+    var capcutIsRunning: () -> Bool = NativeAccountStore.isCapCutRunning
     let updates = UpdateCenter()
     var helper: Process?
     var browser: BrowserLogin?
@@ -38,13 +42,13 @@ final class LauncherModel: ObservableObject {
     var version: String { Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "0.2.0" }
     var selectedProfile: LauncherProfile? { document.profiles.first(where:{$0.id == document.selectedProfileID}) }
     var editorNeedsSignIn: Bool {
-        profileAutomaticDraft && (editingProfileID == nil || !profilePasswordDraft.isEmpty || document.profiles.first(where:{$0.id == editingProfileID})?.authState != .valid)
+        profileMethodDraft != .capcut && profileAutomaticDraft && (editingProfileID == nil || !profilePasswordDraft.isEmpty || document.profiles.first(where:{$0.id == editingProfileID})?.authState != .valid)
     }
     var runningProfile: LauncherProfile? { document.profiles.first(where:{$0.id == runningProfileID}) }
     var busy: Bool { helper?.isRunning == true || browser != nil }
-    init(stateRoot: URL? = nil) throws {
+    init(stateRoot: URL? = nil, nativeAccounts: NativeAccountStore = NativeAccountStore()) throws {
         let state = stateRoot ?? URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent("Library/Application Support/CapCut Launcher")
-        self.state = state; store = ProfileStore(root:state)
+        self.state = state; store = ProfileStore(root:state); self.nativeAccounts = nativeAccounts
         if let existing = try store.load() { document = existing }
         else {
             var initial = ProfilesDocument(); initial.settings = store.legacySettings()
@@ -64,7 +68,8 @@ final class LauncherModel: ObservableObject {
             try store.save(initial); document = initial
             if !initial.profiles.isEmpty { try SessionStore.remove() }
         }
-        updates.isCapCutRunning = { [weak self] in self?.helper?.isRunning == true }
+        if !capcutIsRunning() { try nativeAccounts.restoreManagedLaunch() }
+        updates.isCapCutRunning = { [weak self] in self?.helper?.isRunning == true || self?.capcutIsRunning() == true }
         updates.configure(automatic:document.settings.automaticUpdates)
         verificationTimer = Timer.scheduledTimer(withTimeInterval:300,repeats:true) { [weak self] _ in
             Task { @MainActor in
@@ -78,14 +83,21 @@ final class LauncherModel: ObservableObject {
     }
     func changeProfile(_ id: String) {
         document.selectedProfileID = id; persist()
+        if selectedProfile?.usesCapCutAccount == true { verifySession(id); return }
         if let profile = selectedProfile, profile.authState == .signedOut { recoverSession(profile.id); return }
         if let profile = selectedProfile, profile.authState != .signedOut,
            profile.lastVerified == nil || Date().timeIntervalSince(profile.lastVerified!) > 300 { verifySession(id) }
     }
     func checkSelectedSession() {
         guard let profile = selectedProfile else { return }
+        if profile.usesCapCutAccount { verifySession(profile.id); return }
         if profile.authState == .signedOut { recoverSession(profile.id) }
         else { verifySession(profile.id) }
+    }
+    func checkSelectedProfile(_ id: String) {
+        guard let p = document.profiles.first(where:{$0.id == id}) else { return }
+        if p.usesCapCutAccount || p.authState != .signedOut { verifySession(id) }
+        else { recoverSession(id) }
     }
     func updateProfile(_ id: String, _ update: (inout LauncherProfile) -> Void) {
         guard let index = document.profiles.firstIndex(where:{$0.id == id}) else { return }
@@ -94,6 +106,7 @@ final class LauncherModel: ObservableObject {
     func addProfile() {
         editingProfileID = nil; profileNameDraft = L("Профиль \(document.profiles.count+1)")
         profileEmailDraft = ""; profilePasswordDraft = ""; profileHasPassword = false; profileAutomaticDraft = true
+        profileMethodDraft = .launcher; profileRegionDraft = "US"
         editorError = ""; profileEditorVisible = true
     }
     func renameProfile(_ profile: LauncherProfile) {
@@ -102,6 +115,7 @@ final class LauncherModel: ObservableObject {
             let credentials = profile.automaticSignIn == true ? try CredentialStore.load(profile.id) : nil
             editingProfileID = profile.id; profileNameDraft = profile.name; profileEmailDraft = credentials?.email ?? ""
             profilePasswordDraft = ""; profileHasPassword = credentials != nil; profileAutomaticDraft = profile.automaticSignIn == true
+            profileMethodDraft = profile.usesCapCutAccount ? .capcut : .launcher; profileRegionDraft = profile.region
             editorError = ""; profileEditorVisible = true
         } catch { showError(error.localizedDescription) }
     }
@@ -110,13 +124,15 @@ final class LauncherModel: ObservableObject {
         let name = profileNameDraft.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 60 else { editorError = "Введите название от 1 до 60 символов."; return }
         do {
+            let region = try ProfileStore.countryCode(profileRegionDraft)
             let id = editingProfileID ?? UUID().uuidString
             let priorCredentials = try CredentialStore.load(id)
             var next = document
             let existing = next.profiles.firstIndex(where:{$0.id == id})
             var profile = existing.map { next.profiles[$0] } ?? LauncherProfile(id:id,name:name)
+            let changedMethod = profile.usesCapCutAccount != (profileMethodDraft == .capcut)
             var changedCredentials = false
-            if profileAutomaticDraft {
+            if profileMethodDraft != .capcut && profileAutomaticDraft {
                 let previous = profileHasPassword ? priorCredentials : nil
                 if profilePasswordDraft.isEmpty, let previous {
                     guard profileEmailDraft.trimmingCharacters(in:.whitespacesAndNewlines).lowercased() == previous.email.lowercased() else {
@@ -127,8 +143,13 @@ final class LauncherModel: ObservableObject {
                     try CredentialStore.save(credentials,profileID:id); changedCredentials = true
                 }
             }
-            profile.name = name; profile.automaticSignIn = profileAutomaticDraft
-            if changedCredentials { profile.authState = .signedOut; profile.lastVerified = nil; profile.accountLabel = "" }
+            profile.name = name; profile.region = region; profile.signInMethod = profileMethodDraft
+            profile.automaticSignIn = profileMethodDraft != .capcut && profileAutomaticDraft
+            if changedCredentials || changedMethod { profile.authState = .signedOut; profile.lastVerified = nil; profile.accountLabel = "" }
+            if profile.usesCapCutAccount {
+                let current = try nativeAccounts.currentSummary()
+                profile.accountLabel = current.label; profile.authState = current.present ? .saved : .signedOut; profile.lastVerified = nil
+            }
             if let existing { next.profiles[existing] = profile } else { next.profiles.append(profile); next.selectedProfileID = id }
             do { try store.save(next) } catch {
                 if changedCredentials {
@@ -138,16 +159,18 @@ final class LauncherModel: ObservableObject {
                 throw error
             }
             document = next
-            if !profileAutomaticDraft { try CredentialStore.remove(id) }
+            if profile.automaticSignIn != true { try CredentialStore.remove(id) }
+            if changedMethod { try SessionStore.remove(profileID:id) }
             if changedCredentials { recoveryBlocked.remove(id) }
             dismissProfileEditor()
             if profile.automaticSignIn == true && (changedCredentials || profile.authState != .valid) { signIn(id,launchAfter:false) }
+            else if profile.usesCapCutAccount { status = "Профиль использует текущий вход приложения CapCut."; statusIsError = false; verifySession(id) }
         } catch { editorError = error.localizedDescription }
     }
     func deleteProfile(_ profile: LauncherProfile) {
         guard profile.id != runningProfileID, profile.id != browserProfileID else { showError("Сначала закройте CapCut и окно входа этого профиля."); return }
         let alert = NSAlert(); alert.messageText = L("Удалить профиль «\(profile.name)»?")
-        alert.informativeText = L("Будут удалены вход в Keychain и браузерный профиль этого слота. Локальные проекты CapCut сохранятся.")
+        alert.informativeText = profile.usesCapCutAccount ? L("Будет удалён только профиль лаунчера. Вход в приложении CapCut и локальные проекты сохранятся.") : L("Будут удалены вход в Keychain и браузерный профиль этого слота. Локальные проекты CapCut сохранятся.")
         alert.addButton(withTitle:L("Удалить профиль")); alert.addButton(withTitle:L("Отмена")); alert.alertStyle = .warning
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
@@ -177,6 +200,7 @@ final class LauncherModel: ObservableObject {
     func setAutoStart(_ value: Bool) { document.settings.autoStartAfterAuth = value; persist() }
     func appVersion() -> String { Bundle(path:document.settings.appPath)?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "9.6.0" }
     func signIn(_ id: String, manualBrowser: Bool = false, launchAfter: Bool? = nil, recovery: Bool = false) {
+        if document.profiles.first(where:{$0.id == id})?.usesCapCutAccount == true { startCapCut(id); return }
         guard helper?.isRunning != true else { showError("Сначала закройте CapCut, чтобы сменить или обновить вход."); return }
         if let browser {
             if browserProfileID != id { showError("Сначала завершите вход в открытом браузерном профиле.") }
@@ -224,9 +248,15 @@ final class LauncherModel: ObservableObject {
     func helperExecutable() -> URL { Bundle.main.resourceURL!.appendingPathComponent("Helper/launcher-helper") }
     func verifySession(_ id: String) {
         guard checks[id] == nil, browserProfileID != id, runningProfileID != id,
-            let profile = document.profiles.first(where:{$0.id == id}), profile.authState != .signedOut else { return }
+            let profile = document.profiles.first(where:{$0.id == id}), profile.usesCapCutAccount || profile.authState != .signedOut else { return }
         do {
-            guard let session = try SessionStore.load(profileID:id) else { updateProfile(id){$0.authState = .signedOut}; recoverSession(id); return }
+            if profile.usesCapCutAccount { refreshNativeAccount(id) }
+            guard let session = profile.usesCapCutAccount ? try nativeAccounts.verificationSession() : try SessionStore.load(profileID:id) else {
+                updateProfile(id){$0.authState = .signedOut}
+                if profile.usesCapCutAccount { status = "Войдите в аккаунт в приложении CapCut."; statusIsError = false }
+                else { recoverSession(id) }
+                return
+            }
             let process = Process(); process.executableURL = helperExecutable()
             let output = Pipe(), input = Pipe(); process.standardInput = input; process.standardOutput = output; process.standardError = FileHandle.nullDevice
             checks[id] = process; checkingProfiles.insert(id); checkBuffers[id] = Data()
@@ -237,7 +267,7 @@ final class LauncherModel: ObservableObject {
             }
             process.terminationHandler = { [weak self] _ in Task { @MainActor in self?.checkingProfiles.remove(id); self?.checks[id] = nil; self?.resumeRecovery() } }
             try process.run()
-            var data = try JSONSerialization.data(withJSONObject:["action":"verify","session":session,"userAgent":"CapCut/\(appVersion()) (macOS)"])
+            var data = try JSONSerialization.data(withJSONObject:["action":profile.usesCapCutAccount ? "verify_native" : "verify","session":session,"userAgent":"CapCut/\(appVersion()) (macOS)"])
             data.append(10); input.fileHandleForWriting.write(data); try input.fileHandleForWriting.close()
         } catch { checks[id] = nil; checkingProfiles.remove(id); showError(error.localizedDescription) }
     }
@@ -246,7 +276,11 @@ final class LauncherModel: ObservableObject {
         while let end = checkBuffers[id]?.firstIndex(of:10) {
             let line = checkBuffers[id]!.prefix(upTo:end); checkBuffers[id]!.removeSubrange(...end)
             guard let value = try? JSONSerialization.jsonObject(with:line) as? [String:Any] else { continue }
-            if value["kind"] as? String == "session_valid" { markValid(id) }
+            if value["kind"] as? String == "session_valid" {
+                markValid(id)
+                if document.profiles.first(where:{$0.id == id})?.usesCapCutAccount == true,
+                   let label = value["displayName"] as? String, !label.isEmpty { updateProfile(id){$0.accountLabel = label} }
+            }
             else if value["kind"] as? String == "error" { handleError(value,profileID:id) }
         }
     }
@@ -257,8 +291,14 @@ final class LauncherModel: ObservableObject {
         }
         guard let profile = document.profiles.first(where:{$0.id == id}) else { return }
         do {
-            guard let session = try SessionStore.load(profileID:id) else { signIn(id); return }
-            if profile.authState == .expired || profile.authState == .needsLogin { signIn(id); return }
+            guard !capcutIsRunning() else { showError("Сначала полностью закройте CapCut, затем запустите его из лаунчера."); return }
+            try nativeAccounts.restoreManagedLaunch()
+            let session = profile.usesCapCutAccount ? nil : try SessionStore.load(profileID:id)
+            if !profile.usesCapCutAccount {
+                guard session != nil else { signIn(id); return }
+                if profile.authState == .expired || profile.authState == .needsLogin { signIn(id); return }
+                try nativeAccounts.beginManagedLaunch()
+            }
             _ = try ProfileStore.countryCode(profile.region)
             checks[id]?.terminate(); checks[id] = nil; checkingProfiles.remove(id)
             let process = Process(); process.executableURL = helperExecutable()
@@ -272,16 +312,37 @@ final class LauncherModel: ObservableObject {
             }
             process.terminationHandler = { [weak self] _ in Task { @MainActor in
                 guard let self else { return }; self.helper = nil; self.runningProfileID = nil; self.launching = false
+                do { if !self.capcutIsRunning() { try self.nativeAccounts.restoreManagedLaunch() } }
+                catch { self.lastError = true; self.showError(error.localizedDescription) }
+                if self.document.profiles.first(where:{$0.id == id})?.usesCapCutAccount == true { self.refreshNativeAccount(id) }
                 if self.started && !self.lastError { self.status = "CapCut закрыт. Можно выбрать другой профиль или регион."; self.statusIsError = false }
                 self.resumeRecovery()
             } }
             try process.run()
-            let config: [String:Any] = ["region":profile.region,"appPath":document.settings.appPath,"dataRoot":document.settings.dataRoot,
+            var config: [String:Any] = ["region":profile.region,"appPath":document.settings.appPath,"dataRoot":document.settings.dataRoot,
                 "stateRoot":state.path,"resources":Bundle.main.resourceURL!.appendingPathComponent("Runtime").path,
-                "showProUI":true,"requireSession":true,"session":session]
+                "showProUI":true,"requireSession":!profile.usesCapCutAccount]
+            if let session { config["session"] = session }
+            if profile.usesCapCutAccount, let current = try nativeAccounts.verificationSession() { config["nativeSession"] = current }
             var data = try JSONSerialization.data(withJSONObject:config); data.append(10)
             input.fileHandleForWriting.write(data); try input.fileHandleForWriting.close()
-        } catch { helper = nil; runningProfileID = nil; launching = false; showError(error.localizedDescription) }
+        } catch {
+            helper = nil; runningProfileID = nil; launching = false
+            do { if !capcutIsRunning() { try nativeAccounts.restoreManagedLaunch() } }
+            catch { showError(error.localizedDescription); return }
+            showError(error.localizedDescription)
+        }
+    }
+    func refreshNativeAccount(_ id: String) {
+        guard document.profiles.first(where:{$0.id == id})?.usesCapCutAccount == true else { return }
+        do {
+            let current = try nativeAccounts.currentSummary()
+            updateProfile(id) {
+                $0.accountLabel = current.label
+                if !current.present { $0.authState = .signedOut; $0.lastVerified = nil }
+                else if runningProfileID != id || !nativeVerified { $0.authState = .saved; $0.lastVerified = nil }
+            }
+        } catch { showError(error.localizedDescription) }
     }
     func consumeHelper(_ bytes: Data, profileID: String) {
         helperBuffer.append(bytes)
@@ -289,16 +350,30 @@ final class LauncherModel: ObservableObject {
             let line = helperBuffer.prefix(upTo:end); helperBuffer.removeSubrange(...end)
             guard let value = try? JSONSerialization.jsonObject(with:line) as? [String:Any], let kind = value["kind"] as? String else { continue }
             switch kind {
-            case "started": started = true; launching = false; status = "CapCut \(value["version"] ?? "") запущен."; statusIsError = false
+            case "started":
+                started = true; launching = false
+                status = document.profiles.first(where:{$0.id == profileID})?.usesCapCutAccount == true && document.profiles.first(where:{$0.id == profileID})?.authState != .valid ? "CapCut открыт. При необходимости войдите в аккаунт в приложении." : "CapCut \(value["version"] ?? "") запущен."
+                statusIsError = false
             case "session_checked": if value["present"] as? Bool == true { markValid(profileID) }
             case "catalog_request": if let r = value["region"] as? String { observedRegion = r }
             case "account_verified":
                 nativeVerified = value["success"] as? Bool == true
                 if nativeVerified { markValid(profileID) }
+                else if value["accountMatches"] as? Bool == false {
+                    updateProfile(profileID){$0.authState = .needsLogin; $0.lastVerified = nil}
+                    status = "Сохранённый сеанс относится к другому аккаунту."; statusIsError = true
+                }
                 else if value["expired"] as? Bool == true {
                     updateProfile(profileID){$0.authState = .expired}
-                    status = "Сессия профиля истекла. Закройте CapCut и войдите заново."; statusIsError = true
+                    status = document.profiles.first(where:{$0.id == profileID})?.usesCapCutAccount == true ? "Сессия CapCut истекла. Войдите заново в приложении CapCut." : "Сессия профиля истекла. Закройте CapCut и войдите заново."; statusIsError = true
                     recoverSession(profileID)
+                }
+                if nativeVerified, document.profiles.first(where:{$0.id == profileID})?.usesCapCutAccount == true,
+                   let label = value["displayName"] as? String { updateProfile(profileID){$0.accountLabel = label} }
+            case "session_logout":
+                if document.profiles.first(where:{$0.id == profileID})?.usesCapCutAccount == true {
+                    nativeVerified = false; updateProfile(profileID){$0.authState = .signedOut; $0.accountLabel = ""; $0.lastVerified = nil}
+                    status = "Войдите в аккаунт в приложении CapCut."; statusIsError = false
                 }
             case "error": lastError = true; handleError(value,profileID:profileID)
             default: break

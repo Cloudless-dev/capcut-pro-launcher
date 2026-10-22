@@ -101,7 +101,17 @@ def restore_native_regions(values):
         subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def checked_session(session, user_agent):
+def account_display_label(user):
+    label=next((user[k].strip() for k in ('email','email_address','name','nick_name','nickname','screen_name')
+                if isinstance(user.get(k),str) and user[k].strip()),'')
+    if not label:label='user'+str(user.get('user_id_str') or user.get('user_id') or user.get('uid') or '')
+    if '@' in label:
+        local,domain=label.split('@',1)
+        if '*' not in local:label=local[:2]+'***@'+domain
+    return label[:120]
+
+
+def checked_session(session, user_agent, identity=None):
     if not session:
         return None
     allowed={'passport-api-sg.capcutapi.com','passport16-normal-us-ttp.capcutapi.us'}
@@ -132,6 +142,7 @@ def checked_session(session, user_agent):
     def field(*keys):return next((str(user[k]) for k in keys if user.get(k) is not None and user[k] != ''),'')
     uid=field('user_id_str','user_id','uid')
     if session.get('uid') and str(session['uid'])!=uid:raise ValueError('Сохранённый сеанс относится к другому аккаунту.')
+    if identity is not None:identity['displayName']=account_display_label(user)
     profile={'uid':uid,'xToken':session['xToken'],'csrfToken':session.get('csrfToken',''),
         'avatar_url':field('avatar_url','avatar'),'nick_name':field('name','nick_name','nickname'),
         'screen_name':field('screen_name','name'),'description':field('description'),
@@ -151,6 +162,11 @@ def start(config):
     if config.get('requireSession') and not config.get('session'):
         raise LaunchFailure('auth_missing','Сначала войдите в выбранный профиль через браузер.')
     profile=checked_session(config.get('session'),user_agent)
+    native_auth=None
+    if config.get('nativeSession'):
+        identity={}
+        checked_native_session(config['nativeSession'],user_agent,identity)
+        native_auth={**config['nativeSession'],'sourceHost':identity['sourceHost']}
     emit('session_checked',present=profile is not None)
     paths=[]; original=[]; native_original={}; run=None; proc=None; session=None; target_pid=None
     manager=frida.get_device_manager(); address=''
@@ -179,7 +195,7 @@ def start(config):
             except (frida.ServerNotRunningError,frida.TransportError):time.sleep(.1)
         else:raise ValueError('Не удалось загрузить помощник. Эта сборка CapCut может ограничивать запуск библиотек.')
         session=device.attach('Gadget')
-        agent_config={'region':region,'session':config.get('session'),'profileBase64':profile,
+        agent_config={'region':region,'session':config.get('session'),'profileBase64':profile,'nativeAuth':native_auth,
                       'userAgent':user_agent,'showProUI':config.get('showProUI',True),'probe':config.get('probe',False)}
         code='globalThis.LAUNCH_CONFIG='+json.dumps(agent_config)+';\n'+(resources/'agent.js').read_text()
         script=session.create_script(code);errors=[];ready=set()
@@ -189,6 +205,11 @@ def start(config):
             elif item.get('type')=='send':
                 payload=item['payload'];kind=payload.get('kind','event');ready.add(kind)
                 emit(kind,**{k:v for k,v in payload.items() if k!='kind'})
+                if kind=='account_verified' and payload.get('accountMatches') is False:
+                    emit('error',code='account_mismatch',message='Сохранённый сеанс относится к другому аккаунту.')
+                    if target_pid:
+                        try:os.kill(target_pid,signal.SIGTERM)
+                        except ProcessLookupError:pass
         script.on('message',message);script.load()
         if errors or not {'preferences_ready','cronet_ready','agent_ready'}.issubset(ready):
             raise ValueError('Версия сетевой библиотеки CapCut не поддерживается.')
@@ -216,6 +237,24 @@ def start(config):
         if run:shutil.rmtree(run,ignore_errors=True)
 
 
+def checked_native_session(session, user_agent, identity=None):
+    # Native Google/email/QR sign-ins already contain a CapCut token. No Google
+    # credentials or cookies are imported, and tokens never leave official APIs.
+    failures=[]
+    for host in ('passport-api-sg.capcutapi.com','passport16-normal-us-ttp.capcutapi.us'):
+        try:
+            if identity is None:return checked_session({**session,'sourceHost':host},user_agent)
+            profile=checked_session({**session,'sourceHost':host},user_agent,identity)
+            identity['sourceHost']=host
+            return profile
+        except LaunchFailure as error:failures.append(error)
+    if any(e.code=='network_error' for e in failures):
+        raise LaunchFailure('network_error','Не удалось проверить вход. Проверьте соединение и повторите.')
+    if all(e.code=='session_expired' for e in failures):
+        raise LaunchFailure('session_expired','Сессия CapCut истекла. Войдите заново в приложении CapCut.')
+    raise LaunchFailure('auth_rejected','Войдите в аккаунт в приложении CapCut.')
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--check',action='store_true');args=parser.parse_args()
     if args.check:
@@ -225,10 +264,12 @@ def main():
         raw=sys.stdin.readline(500000)
         if not raw.endswith('\n'):raise ValueError('Неверный запрос запуска.')
         config=json.loads(raw)
-        if config.get('action')=='verify':
+        if config.get('action') in ('verify','verify_native'):
             if not config.get('session'):raise LaunchFailure('auth_missing','В этом профиле ещё нет сохранённого входа.')
-            checked_session(config['session'],config.get('userAgent','CapCut/9.6.0 (macOS)'))
-            emit('session_valid');return
+            identity={}
+            if config.get('action')=='verify_native':checked_native_session(config['session'],config.get('userAgent','CapCut/9.6.0 (macOS)'),identity)
+            else:checked_session(config['session'],config.get('userAgent','CapCut/9.6.0 (macOS)'))
+            emit('session_valid',**identity);return
         start(config)
     except Exception as e:
         # Known errors have fixed messages; exception repr may contain request secrets.

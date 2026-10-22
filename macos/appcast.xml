@@ -6,6 +6,13 @@
     <description>Signed updates for the Apple Silicon macOS launcher.</description>
     <language>en</language>
     <item>
+      <title>CapCut Launcher 0.04</title>
+      <pubDate>Thu, 22 Oct 2026 13:01:56 +0000</pubDate>
+      <description>Improved sign-in and profile management.</description>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Cloudless-dev/capcut-pro-launcher/releases/download/macos-v0.04/CapCut-Launcher-0.04-macOS-arm64.zip" length="214174136" type="application/octet-stream" sparkle:edSignature="Qlk8WCBB9zKBHatXKyXsTTOUX0Eedzz+V99R6YOUQLAasDPCdhtUf+IwLNPddsbCNUMwZldeTUPwbai6EXzgDw==" sparkle:version="6" sparkle:shortVersionString="0.04" sparkle:os="macos" />
+    </item>
+    <item>
       <title>CapCut Launcher 0.031</title>
       <pubDate>Thu, 22 Oct 2026 08:32:41 GMT</pubDate>
       <description>Profiles, automatic sign-in and region selection.</description>

@@ -7,6 +7,27 @@ const tracked = new Map(), callbacks = new Set();
 let sessionActive = !!cfg.session, profileSeen = false, regionReads = 0;
 const emit = (kind, fields = {}) => send({kind, ...fields});
 const safeDomain = h => /(^|\.)(capcutapi\.com|capcutapi\.us)$/.test(h);
+// Device registration and TTNet can replace the startup region while CapCut is
+// running. Apply the user's selection at the API boundary as well. Authentication
+// and signed download URLs keep their original routing and signature material.
+function regionURL(raw, country) {
+  if (!/^[A-Z]{2}$/.test(country)) throw new Error('Invalid country code');
+  const parsed = /^https:\/\/([a-z0-9.-]+)(?::443)?(\/[^?#]*)(\?[^#]*)?(#.*)?$/i.exec(raw);
+  if (!parsed || !safeDomain(parsed[1].toLowerCase()) ||
+      /^\/(?:passport|monitor_pc)(?:\/|$)/i.test(parsed[2])) return raw;
+  const query = parsed[3] || '';
+  if (/[?&](?:sign|signature|x-bogus|x-signature|x-amz-signature|x-goog-signature)=/i.test(query)) return raw;
+  const changed = query.replace(/([?&](?:region|store_region|real_region)=)([a-z]{2})(?=&|$)/gi,
+    (_, key) => key + country);
+  return changed === query ? raw : raw.slice(0, raw.indexOf('?')) + changed + (parsed[4] || '');
+}
+function regionHeadersAllowed(raw) {
+  const parsed = /^https:\/\/([a-z0-9.-]+)(?::443)?(\/[^?#]*)/i.exec(raw);
+  return !!parsed && safeDomain(parsed[1].toLowerCase()) &&
+    !/^\/(?:passport|monitor_pc)(?:\/|$)/i.test(parsed[2]) &&
+    !/[?&](?:sign|signature|x-bogus|x-signature|x-amz-signature|x-goog-signature)=/i.test(raw.split('#')[0]);
+}
+const regionHeaderNames = new Set(['store-country-code', 'x-tt-store-region', 'x-tt-region']);
 const cf = Process.getModuleByName('CoreFoundation');
 const cfFn = (n, r, a) => new NativeFunction(cf.getExportByName(n), r, a);
 const makeCF = cfFn('CFStringCreateWithCString','pointer',['pointer','pointer','uint']);
@@ -82,6 +103,7 @@ Process.attachModuleObserver({onAdded(module) {
   const create = fn('Cronet_HttpHeader_Create','pointer',[]);
   const destroy = fn('Cronet_HttpHeader_Destroy','void',['pointer']);
   const nameGet = fn('Cronet_HttpHeader_name_get','pointer',['pointer']);
+  const valueGet = fn('Cronet_HttpHeader_value_get','pointer',['pointer']);
   const nameSet = fn('Cronet_HttpHeader_name_set','void',['pointer','pointer']);
   const valueSet = fn('Cronet_HttpHeader_value_set','void',['pointer','pointer']);
   const bufferData = fn('Cronet_Buffer_GetData','pointer',['pointer']);
@@ -104,10 +126,23 @@ Process.attachModuleObserver({onAdded(module) {
         if (/\/passport\/(?:web\/)?logout(?:[/?]|$)/.test(url)) {
           sessionActive=false;emit('session_logout');return;
         }
+        const changed=regionURL(url,target.toUpperCase());
+        if(changed!==url) {
+          this.url=Memory.allocUtf8String(changed);a[2]=this.url;url=changed;
+          emit('request_region_updated',{region:target.toUpperCase(),source:'query'});
+        }
+        if(regionHeadersAllowed(url)) {
+          for(let i=0,n=Number(size(a[3]));i<n;i++) {
+            const h=at(a[3],i),name=nameGet(h).readUtf8String().toLowerCase();
+            if(!regionHeaderNames.has(name))continue;
+            const value=valueGet(h).readUtf8String();
+            if(!/^[a-z]{2}$/i.test(value)||value.toUpperCase()===target.toUpperCase())continue;
+            valueSet(h,Memory.allocUtf8String(target));
+            emit('request_region_updated',{region:target.toUpperCase(),source:'header'});
+          }
+        }
         const catalog=/\/artist\/v1\/|\/lv\/v1\/commerce\/get_entrances(?:[?]|$)/.test(url);
         if (catalog) {
-          const changed=url.replace(/([?&](?:region|store_region)=)[^&]*/gi,(_,k)=>k+target.toUpperCase());
-          if (changed!==url) {this.url=Memory.allocUtf8String(changed);a[2]=this.url;url=changed;}
           const r=/(?:[?&])(?:region|store_region)=([^&]*)/i.exec(url);
           emit('catalog_request',{region:r?decodeURIComponent(r[1]):null,path:url.split('?')[0].replace(/^https:\/\/[^/]+/,'')});
         }

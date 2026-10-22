@@ -6,6 +6,13 @@
     <description>Signed updates for the Apple Silicon macOS launcher.</description>
     <language>en</language>
     <item>
+      <title>CapCut Launcher 0.03</title>
+      <pubDate>Thu, 22 Oct 2026 07:40:47 +0000</pubDate>
+      <description>Automatic sign-in, background session renewal and profile credentials stored in macOS Keychain.</description>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Cloudless-dev/capcut-pro-launcher/releases/download/macos-v0.03/CapCut-Launcher-0.03-macOS-arm64.zip" length="214148508" type="application/octet-stream" sparkle:edSignature="bAdJJ6WtUJ7h5nyV2s5FLiySsVZ+gVBrS/vn/NNVnWxIGzZGyUI6xMlUKoqr39FPSCWpYUkg8dax8aSTly6KDg==" sparkle:version="4" sparkle:shortVersionString="0.03" sparkle:os="macos" />
+    </item>
+    <item>
       <title>CapCut Launcher 0.2.0</title>
       <pubDate>Thu, 22 Oct 2026 07:07:36 +0000</pubDate>
       <description>Profiles, browser sign-in, region selection, Russian/English interface, and system/light/dark themes. Requires macOS 14+ on Apple Silicon.</description>

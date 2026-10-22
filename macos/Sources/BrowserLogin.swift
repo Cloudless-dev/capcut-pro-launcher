@@ -21,7 +21,14 @@ final class BrowserLogin: NSObject {
     var onSuccess: (([String: Any]) -> Void)?
     var onClose: (() -> Void)?
     var onStatus: ((String) -> Void)?
-    init(version: String, profileID: String, profileRoot: URL) {
+    var onNeedsInteraction: (() -> Void)?
+    var onFailure: (() -> Void)?
+    private var credentials: LoginCredentials?
+    private let automatic: Bool
+    private var cancelled = false
+    private var exchangeTask: Task<Void,Never>?
+    init(version: String, profileID: String, profileRoot: URL, credentials: LoginCredentials? = nil) {
+        self.credentials = credentials; automatic = credentials != nil
         capcutVersion = version; self.profileID = profileID; self.profileRoot = profileRoot; super.init()
     }
     func show() {
@@ -38,10 +45,14 @@ final class BrowserLogin: NSObject {
                 if data.isEmpty { handle.readabilityHandler = nil; return }
                 Task { @MainActor in self?.consume(data) }
             }
-            p.terminationHandler = { [weak self] _ in Task { @MainActor in self?.onClose?() } }
+            p.terminationHandler = { [weak self] _ in Task { @MainActor in
+                self?.cancelled = true; self?.exchangeTask?.cancel(); self?.onClose?()
+            } }
             try p.run()
-            send(["nonce":nonce,"state":state,"stateRoot":profileRoot.path,"language":InterfacePreferences.shared.effectiveLanguage,"theme":InterfacePreferences.shared.theme])
-            onStatus?("Окно входа открыто. Войдите на сайте CapCut.")
+            var config: [String:Any] = ["nonce":nonce,"state":state,"stateRoot":profileRoot.path,"language":InterfacePreferences.shared.effectiveLanguage,"theme":InterfacePreferences.shared.theme]
+            if let credentials { config["credentials"] = ["email":credentials.email,"password":credentials.password] }
+            send(config); credentials = nil
+            onStatus?(automatic ? "Выполняю автоматический вход…" : "Окно входа открыто. Войдите на сайте CapCut.")
         } catch { fail(error.localizedDescription); onClose?() }
     }
     func send(_ value: [String: Any]) {
@@ -50,31 +61,42 @@ final class BrowserLogin: NSObject {
         try? input.fileHandleForWriting.write(contentsOf: data)
     }
     func activate() {
+        send(["command":"show"])
         NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "app.capcutlauncher.macos.login" })?.activate(options: [.activateAllWindows])
     }
+    func cancel() { cancelled = true; credentials = nil; exchangeTask?.cancel(); send(["command":"close"]) }
     func consume(_ bytes: Data) {
+        guard !cancelled else { return }
         buffer.append(bytes)
         while let end = buffer.firstIndex(of: 10) {
             let line = buffer.prefix(upTo: end); buffer.removeSubrange(...end)
             guard let value = try? JSONSerialization.jsonObject(with: line) as? [String: Any], let kind = value["kind"] as? String else { continue }
             if kind == "grant_requested" { onStatus?("Получаю одноразовое разрешение на вход…") }
             if kind == "grant_error" { onStatus?("Сайт не передал разрешение. Повторите передачу в окне входа.") }
+            if kind == "interaction_required" { onNeedsInteraction?(); onStatus?("Подтвердите вход в открывшемся окне CapCut.") }
+            if kind == "login_error" { fail("Не удалось войти автоматически. Проверьте почту и пароль в настройках профиля."); return }
             guard kind == "grant", !busy, value["nonce"] as? String == nonce,
                   let grant = value["grant"] as? [String: Any], let token = grant["token"] as? String, !token.isEmpty else { continue }
             if let returned = grant["state"] as? String, !returned.isEmpty, returned != state { fail("Проверка состояния входа не пройдена."); return }
             busy = true
-            Task {
+            exchangeTask = Task {
                 do {
                     let session = try await exchange(grant: grant, token: token)
+                    try Task.checkCancellation()
+                    guard !cancelled else { return }
                     try SessionStore.save(session, profileID: profileID)
                     send(["command":"close"])
                     onSuccess?(session)
-                } catch { fail(error.localizedDescription) }
+                } catch { if !Task.isCancelled && !cancelled { fail(error.localizedDescription) } }
             }
         }
     }
     func fail(_ text: String) {
+        guard !cancelled else { return }
+        cancelled = true
         onStatus?(text); send(["command":"close"])
+        onFailure?()
+        if automatic { return }
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert(); alert.messageText = L("Вход в CapCut"); alert.informativeText = L(text); alert.runModal()
     }
@@ -86,7 +108,7 @@ final class BrowserLogin: NSObject {
         let domain = grant["domain"] as? String ?? ""
         let host = (URL(string: domain)?.host?.hasSuffix(".capcutapi.us") == true || domain == "https://login.us.capcut.com")
             ? "passport16-normal-us-ttp.capcutapi.us" : "passport-api-sg.capcutapi.com"
-        let configuration = URLSessionConfiguration.ephemeral; configuration.timeoutIntervalForRequest = 25
+        let configuration = URLSessionConfiguration.ephemeral; configuration.timeoutIntervalForRequest = 25; configuration.timeoutIntervalForResource = 60
         let network = URLSession(configuration: configuration, delegate: NoRedirectSession(), delegateQueue: nil)
         defer { network.invalidateAndCancel() }
         let agent = "CapCut/\(capcutVersion) (macOS)"

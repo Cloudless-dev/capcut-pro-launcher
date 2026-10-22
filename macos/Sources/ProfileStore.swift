@@ -19,6 +19,8 @@ struct LauncherProfile: Codable, Identifiable, Equatable {
     var accountLabel: String = ""
     var authState: ProfileAuthState = .signedOut
     var lastVerified: Date?
+    // Optional for compatibility with profiles created before automatic sign-in.
+    var automaticSignIn: Bool?
     init(id: String = UUID().uuidString, name: String, region: String = "US") {
         self.id = id; self.name = name; self.region = region
     }

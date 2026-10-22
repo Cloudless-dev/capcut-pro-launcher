@@ -17,6 +17,10 @@ final class LauncherModel: ObservableObject {
     @Published var editingProfileID: String?
     @Published var profileEditorVisible = false
     @Published var profileNameDraft = ""
+    @Published var profileEmailDraft = ""
+    @Published var profilePasswordDraft = ""
+    @Published var profileAutomaticDraft = true
+    @Published var profileHasPassword = false
     @Published var editorError = ""
     let state: URL
     let store: ProfileStore
@@ -28,12 +32,18 @@ final class LauncherModel: ObservableObject {
     private var checkBuffers: [String:Data] = [:]
     private var started = false
     private var lastError = false
+    private var verificationTimer: Timer?
+    private var pendingRecovery = Set<String>()
+    private var recoveryBlocked = Set<String>()
     var version: String { Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "0.2.0" }
     var selectedProfile: LauncherProfile? { document.profiles.first(where:{$0.id == document.selectedProfileID}) }
+    var editorNeedsSignIn: Bool {
+        profileAutomaticDraft && (editingProfileID == nil || !profilePasswordDraft.isEmpty || document.profiles.first(where:{$0.id == editingProfileID})?.authState != .valid)
+    }
     var runningProfile: LauncherProfile? { document.profiles.first(where:{$0.id == runningProfileID}) }
     var busy: Bool { helper?.isRunning == true || browser != nil }
-    init() throws {
-        let state = URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent("Library/Application Support/CapCut Launcher")
+    init(stateRoot: URL? = nil) throws {
+        let state = stateRoot ?? URL(fileURLWithPath:NSHomeDirectory()).appendingPathComponent("Library/Application Support/CapCut Launcher")
         self.state = state; store = ProfileStore(root:state)
         if let existing = try store.load() { document = existing }
         else {
@@ -56,29 +66,83 @@ final class LauncherModel: ObservableObject {
         }
         updates.isCapCutRunning = { [weak self] in self?.helper?.isRunning == true }
         updates.configure(automatic:document.settings.automaticUpdates)
+        verificationTimer = Timer.scheduledTimer(withTimeInterval:300,repeats:true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.busy, let p = self.selectedProfile, p.authState == .valid || p.authState == .saved else { return }
+                self.verifySession(p.id)
+            }
+        }
     }
     func persist() {
         do { try store.save(document) } catch { showError(error.localizedDescription) }
     }
     func changeProfile(_ id: String) {
         document.selectedProfileID = id; persist()
+        if let profile = selectedProfile, profile.authState == .signedOut { recoverSession(profile.id); return }
         if let profile = selectedProfile, profile.authState != .signedOut,
            profile.lastVerified == nil || Date().timeIntervalSince(profile.lastVerified!) > 300 { verifySession(id) }
+    }
+    func checkSelectedSession() {
+        guard let profile = selectedProfile else { return }
+        if profile.authState == .signedOut { recoverSession(profile.id) }
+        else { verifySession(profile.id) }
     }
     func updateProfile(_ id: String, _ update: (inout LauncherProfile) -> Void) {
         guard let index = document.profiles.firstIndex(where:{$0.id == id}) else { return }
         update(&document.profiles[index]); persist()
     }
-    func addProfile() { editingProfileID = nil; profileNameDraft = L("Профиль \(document.profiles.count+1)"); editorError = ""; profileEditorVisible = true }
-    func renameProfile(_ profile: LauncherProfile) { editingProfileID = profile.id; profileNameDraft = profile.name; editorError = ""; profileEditorVisible = true }
+    func addProfile() {
+        editingProfileID = nil; profileNameDraft = L("Профиль \(document.profiles.count+1)")
+        profileEmailDraft = ""; profilePasswordDraft = ""; profileHasPassword = false; profileAutomaticDraft = true
+        editorError = ""; profileEditorVisible = true
+    }
+    func renameProfile(_ profile: LauncherProfile) {
+        guard !busy else { return }
+        do {
+            let credentials = profile.automaticSignIn == true ? try CredentialStore.load(profile.id) : nil
+            editingProfileID = profile.id; profileNameDraft = profile.name; profileEmailDraft = credentials?.email ?? ""
+            profilePasswordDraft = ""; profileHasPassword = credentials != nil; profileAutomaticDraft = profile.automaticSignIn == true
+            editorError = ""; profileEditorVisible = true
+        } catch { showError(error.localizedDescription) }
+    }
+    func dismissProfileEditor() { profilePasswordDraft = ""; profileEmailDraft = ""; profileEditorVisible = false }
     func saveProfileName() {
         let name = profileNameDraft.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !name.isEmpty, name.count <= 60 else { editorError = "Введите название от 1 до 60 символов."; return }
-        if let id = editingProfileID { updateProfile(id){$0.name = name} }
-        else {
-            let profile = LauncherProfile(name:name); document.profiles.append(profile); document.selectedProfileID = profile.id; persist()
-        }
-        profileEditorVisible = false
+        do {
+            let id = editingProfileID ?? UUID().uuidString
+            let priorCredentials = try CredentialStore.load(id)
+            var next = document
+            let existing = next.profiles.firstIndex(where:{$0.id == id})
+            var profile = existing.map { next.profiles[$0] } ?? LauncherProfile(id:id,name:name)
+            var changedCredentials = false
+            if profileAutomaticDraft {
+                let previous = profileHasPassword ? priorCredentials : nil
+                if profilePasswordDraft.isEmpty, let previous {
+                    guard profileEmailDraft.trimmingCharacters(in:.whitespacesAndNewlines).lowercased() == previous.email.lowercased() else {
+                        editorError = "При смене почты введите пароль заново."; return
+                    }
+                } else {
+                    let credentials = try LoginCredentials.validated(email:profileEmailDraft,password:profilePasswordDraft)
+                    try CredentialStore.save(credentials,profileID:id); changedCredentials = true
+                }
+            }
+            profile.name = name; profile.automaticSignIn = profileAutomaticDraft
+            if changedCredentials { profile.authState = .signedOut; profile.lastVerified = nil; profile.accountLabel = "" }
+            if let existing { next.profiles[existing] = profile } else { next.profiles.append(profile); next.selectedProfileID = id }
+            do { try store.save(next) } catch {
+                if changedCredentials {
+                    if let priorCredentials { try? CredentialStore.save(priorCredentials,profileID:id) }
+                    else { try? CredentialStore.remove(id) }
+                }
+                throw error
+            }
+            document = next
+            if !profileAutomaticDraft { try CredentialStore.remove(id) }
+            if changedCredentials { recoveryBlocked.remove(id) }
+            dismissProfileEditor()
+            if profile.automaticSignIn == true && (changedCredentials || profile.authState != .valid) { signIn(id,launchAfter:false) }
+        } catch { editorError = error.localizedDescription }
     }
     func deleteProfile(_ profile: LauncherProfile) {
         guard profile.id != runningProfileID, profile.id != browserProfileID else { showError("Сначала закройте CapCut и окно входа этого профиля."); return }
@@ -91,6 +155,8 @@ final class LauncherModel: ObservableObject {
             let directory = try store.directory(profile.id)
             if FileManager.default.fileExists(atPath:directory.path) { try FileManager.default.removeItem(at:directory) }
             try SessionStore.remove(profileID:profile.id)
+            try CredentialStore.remove(profile.id)
+            pendingRecovery.remove(profile.id); recoveryBlocked.remove(profile.id)
             document.profiles.removeAll(where:{$0.id == profile.id})
             if document.selectedProfileID == profile.id { document.selectedProfileID = document.profiles.first?.id }
             persist(); status = "Профиль удалён. Проекты CapCut сохранены."; statusIsError = false
@@ -110,7 +176,7 @@ final class LauncherModel: ObservableObject {
     func setAutomaticUpdates(_ value: Bool) { document.settings.automaticUpdates = value; persist(); updates.configure(automatic:value) }
     func setAutoStart(_ value: Bool) { document.settings.autoStartAfterAuth = value; persist() }
     func appVersion() -> String { Bundle(path:document.settings.appPath)?.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "9.6.0" }
-    func signIn(_ id: String) {
+    func signIn(_ id: String, manualBrowser: Bool = false, launchAfter: Bool? = nil, recovery: Bool = false) {
         guard helper?.isRunning != true else { showError("Сначала закройте CapCut, чтобы сменить или обновить вход."); return }
         if let browser {
             if browserProfileID != id { showError("Сначала завершите вход в открытом браузерном профиле.") }
@@ -118,26 +184,49 @@ final class LauncherModel: ObservableObject {
         }
         guard document.profiles.contains(where:{$0.id == id}) else { return }
         do {
+            let automatic = !manualBrowser && document.profiles.first(where:{$0.id == id})?.automaticSignIn == true
+            let credentials = automatic ? try CredentialStore.load(id) : nil
+            if automatic && credentials == nil { showError("Откройте настройки профиля и сохраните почту и пароль."); return }
+            if !recovery { recoveryBlocked.remove(id) }
+            recoveryBlocked.insert(id)
             let root = try store.directory(id)
             try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
-            let b = BrowserLogin(version:appVersion(),profileID:id,profileRoot:root); browser = b; browserProfileID = id
+            let b = BrowserLogin(version:appVersion(),profileID:id,profileRoot:root,credentials:credentials); browser = b; browserProfileID = id
             b.onStatus = { [weak self] text in self?.status = text; self?.statusIsError = false }
             b.onSuccess = { [weak self] session in
                 guard let self else { return }
                 self.updateProfile(id){$0.accountLabel = session["displayName"] as? String ?? ""; $0.authState = .valid; $0.lastVerified = Date()}
+                self.recoveryBlocked.remove(id); self.pendingRecovery.remove(id)
                 self.status = "Вход сохранён в выбранном профиле."; self.statusIsError = false
-                if self.document.settings.autoStartAfterAuth && self.document.selectedProfileID == id { self.startCapCut(id) }
+                if (launchAfter ?? self.document.settings.autoStartAfterAuth) && self.document.selectedProfileID == id { self.startCapCut(id) }
             }
-            b.onClose = { [weak self] in self?.browser = nil; self?.browserProfileID = nil }
+            b.onNeedsInteraction = { [weak self] in self?.updateProfile(id){$0.authState = .needsLogin} }
+            b.onFailure = { [weak self] in self?.updateProfile(id){$0.authState = .needsLogin}; self?.statusIsError = true }
+            b.onClose = { [weak self] in self?.browser = nil; self?.browserProfileID = nil; self?.resumeRecovery() }
             b.show()
         } catch { showError(error.localizedDescription) }
+    }
+    func cancelSignIn(_ id: String) {
+        guard browserProfileID == id else { return }
+        browser?.cancel(); status = "Вход отменён."; statusIsError = false
+    }
+    func recoverSession(_ id: String) {
+        guard document.profiles.first(where:{$0.id == id})?.automaticSignIn == true, !recoveryBlocked.contains(id) else { return }
+        pendingRecovery.insert(id)
+        resumeRecovery()
+    }
+    func resumeRecovery() {
+        guard !busy, let id = pendingRecovery.sorted().first else { return }
+        pendingRecovery.remove(id)
+        guard !recoveryBlocked.contains(id) else { resumeRecovery(); return }
+        signIn(id,launchAfter:false,recovery:true)
     }
     func helperExecutable() -> URL { Bundle.main.resourceURL!.appendingPathComponent("Helper/launcher-helper") }
     func verifySession(_ id: String) {
         guard checks[id] == nil, browserProfileID != id, runningProfileID != id,
             let profile = document.profiles.first(where:{$0.id == id}), profile.authState != .signedOut else { return }
         do {
-            guard let session = try SessionStore.load(profileID:id) else { updateProfile(id){$0.authState = .signedOut}; return }
+            guard let session = try SessionStore.load(profileID:id) else { updateProfile(id){$0.authState = .signedOut}; recoverSession(id); return }
             let process = Process(); process.executableURL = helperExecutable()
             let output = Pipe(), input = Pipe(); process.standardInput = input; process.standardOutput = output; process.standardError = FileHandle.nullDevice
             checks[id] = process; checkingProfiles.insert(id); checkBuffers[id] = Data()
@@ -146,7 +235,7 @@ final class LauncherModel: ObservableObject {
                 if bytes.isEmpty { handle.readabilityHandler = nil; return }
                 Task { @MainActor in self?.consumeCheck(bytes,id:id) }
             }
-            process.terminationHandler = { [weak self] _ in Task { @MainActor in self?.checkingProfiles.remove(id); self?.checks[id] = nil } }
+            process.terminationHandler = { [weak self] _ in Task { @MainActor in self?.checkingProfiles.remove(id); self?.checks[id] = nil; self?.resumeRecovery() } }
             try process.run()
             var data = try JSONSerialization.data(withJSONObject:["action":"verify","session":session,"userAgent":"CapCut/\(appVersion()) (macOS)"])
             data.append(10); input.fileHandleForWriting.write(data); try input.fileHandleForWriting.close()
@@ -184,6 +273,7 @@ final class LauncherModel: ObservableObject {
             process.terminationHandler = { [weak self] _ in Task { @MainActor in
                 guard let self else { return }; self.helper = nil; self.runningProfileID = nil; self.launching = false
                 if self.started && !self.lastError { self.status = "CapCut закрыт. Можно выбрать другой профиль или регион."; self.statusIsError = false }
+                self.resumeRecovery()
             } }
             try process.run()
             let config: [String:Any] = ["region":profile.region,"appPath":document.settings.appPath,"dataRoot":document.settings.dataRoot,
@@ -208,6 +298,7 @@ final class LauncherModel: ObservableObject {
                 else if value["expired"] as? Bool == true {
                     updateProfile(profileID){$0.authState = .expired}
                     status = "Сессия профиля истекла. Закройте CapCut и войдите заново."; statusIsError = true
+                    recoverSession(profileID)
                 }
             case "error": lastError = true; handleError(value,profileID:profileID)
             default: break
@@ -226,6 +317,7 @@ final class LauncherModel: ObservableObject {
         else if code == "auth_rejected" { updateProfile(profileID){$0.authState = .needsLogin} }
         else if code == "auth_missing" { updateProfile(profileID){$0.authState = .signedOut} }
         status = value["message"] as? String ?? "Не удалось выполнить действие."; statusIsError = true
+        if ["session_expired","auth_rejected","auth_missing"].contains(code) { recoverSession(profileID) }
     }
     func chooseApp() {
         guard !busy else { return }; let panel = NSOpenPanel(); panel.allowedContentTypes = [.applicationBundle]; panel.canChooseDirectories = false

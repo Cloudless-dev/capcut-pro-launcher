@@ -36,9 +36,7 @@ struct LauncherRootView: View {
         .environment(\.locale,interface.locale)
         .background(Color(nsColor:.windowBackgroundColor))
         .sheet(isPresented:$model.profileEditorVisible) { ProfileEditor(model:model) }
-        .onAppear {
-            if let p = model.selectedProfile, p.authState != .signedOut { model.verifySession(p.id) }
-        }
+        .onAppear { model.checkSelectedSession() }
     }
     var sidebar: some View {
         VStack(alignment:.leading,spacing:24) {
@@ -113,7 +111,7 @@ struct ProfilesPage: View {
                 VStack(spacing:14) {
                     Image(systemName:"person.crop.circle.badge.plus").font(.system(size:36,weight:.light)).foregroundStyle(Color.accentColor)
                     Text(L("Первый профиль")).font(.system(size:19,weight:.semibold))
-                    Text(L("Создайте профиль и войдите через браузер.\nЛаунчер сохранит вход и выбранный регион."))
+                    Text(L("Создайте профиль и укажите почту и пароль CapCut.\nЛаунчер выполнит вход и сохранит выбранный регион."))
                         .font(.system(size:13)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Button(L("Создать профиль")) { model.addProfile() }.buttonStyle(.borderedProminent).controlSize(.large)
                 }.frame(maxWidth:.infinity).padding(.vertical,60).surface()
@@ -121,10 +119,10 @@ struct ProfilesPage: View {
                 VStack(spacing:8) {
                     ForEach(model.document.profiles) { profile in
                         ProfileRow(profile:profile,selected:model.document.selectedProfileID == profile.id,
-                            running:model.runningProfileID == profile.id,checking:model.checkingProfiles.contains(profile.id)) {
+                            running:model.runningProfileID == profile.id,checking:model.checkingProfiles.contains(profile.id) || model.browserProfileID == profile.id) {
                                 model.changeProfile(profile.id)
                             }.contextMenu {
-                                Button(L("Переименовать"),systemImage:"pencil") { model.renameProfile(profile) }
+                                Button(L("Редактировать профиль"),systemImage:"pencil") { model.renameProfile(profile) }.disabled(model.busy)
                                 Button(L("Войти заново"),systemImage:"arrow.clockwise") { model.signIn(profile.id) }.disabled(model.busy)
                                 Divider()
                                 Button(L("Удалить профиль"),systemImage:"trash",role:.destructive) { model.deleteProfile(profile) }
@@ -193,7 +191,8 @@ struct ProfileDetail: View {
                 Label(L("Настройки профиля"),systemImage:"person.crop.rectangle").font(.system(size:13,weight:.semibold))
                 Spacer()
                 Menu {
-                    Button(L("Переименовать"),systemImage:"pencil") { model.renameProfile(profile) }
+                    Button(L("Редактировать профиль"),systemImage:"pencil") { model.renameProfile(profile) }.disabled(model.busy)
+                    Button(L("Войти через браузер"),systemImage:"safari") { model.signIn(profile.id,manualBrowser:true) }.disabled(model.busy)
                     Button(L("Удалить профиль"),systemImage:"trash",role:.destructive) { model.deleteProfile(profile) }
                         .disabled(model.runningProfileID == profile.id || model.browserProfileID == profile.id)
                 } label: { Image(systemName:"ellipsis").frame(width:22,height:20) }.menuStyle(.borderlessButton).fixedSize().help(L("Действия с профилем"))
@@ -222,8 +221,8 @@ struct ProfileDetail: View {
             HStack(alignment:.center,spacing:18) {
                 Image(systemName:profile.authState == .expired ? "exclamationmark.shield" : "safari").font(.system(size:20)).foregroundStyle(.secondary).frame(width:24)
                 VStack(alignment:.leading,spacing:5) {
-                    Text(profile.authState == .expired ? L("Сессия истекла") : L("Вход через браузер")).font(.system(size:13,weight:.medium))
-                    Text(profile.authState == .expired || profile.authState == .needsLogin ? L("Войдите заново, чтобы продолжить работу.") : L("У каждого профиля свой отдельный браузерный сеанс."))
+                    Text(profile.authState == .expired ? L("Сессия истекла") : profile.automaticSignIn == true ? L("Автоматический вход") : L("Вход через браузер")).font(.system(size:13,weight:.medium))
+                    Text(model.browserProfileID == profile.id ? L("Выполняю автоматический вход…") : profile.authState == .expired || profile.authState == .needsLogin ? L("Войдите заново, чтобы продолжить работу.") : L("У каждого профиля свой отдельный браузерный сеанс."))
                         .font(.system(size:11)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength:10)
@@ -231,8 +230,12 @@ struct ProfileDetail: View {
                     Button { model.verifySession(profile.id) } label: { Image(systemName:"arrow.clockwise") }
                         .buttonStyle(.borderless).help(L("Проверить сессию")).disabled(model.checkingProfiles.contains(profile.id) || model.busy)
                 }
-                Button(profile.authState == .signedOut ? L("Войти") : profile.authState == .expired || profile.authState == .needsLogin ? L("Войти заново") : L("Повторный вход")) { model.signIn(profile.id) }
-                    .buttonStyle(.bordered).disabled(model.helper?.isRunning == true)
+                if model.browserProfileID == profile.id {
+                    Button(L("Отменить вход")) { model.cancelSignIn(profile.id) }.buttonStyle(.bordered)
+                } else {
+                    Button(profile.authState == .signedOut ? L("Войти") : profile.authState == .expired || profile.authState == .needsLogin ? L("Войти заново") : L("Повторный вход")) { model.signIn(profile.id) }
+                        .buttonStyle(.bordered).disabled(model.busy)
+                }
             }
         }.surface()
     }
@@ -283,15 +286,12 @@ struct LaunchBar: View {
                 }
                 Spacer(minLength:5)
                 if let profile = model.selectedProfile {
-                    Button {
-                        if profile.authState == .signedOut || profile.authState == .expired || profile.authState == .needsLogin { model.signIn(profile.id) }
-                        else { model.startCapCut(profile.id) }
-                    } label: {
-                        Label(model.launching ? L("Запускаю…") : model.runningProfileID == profile.id ? L("Показать CapCut") : profile.authState == .signedOut || profile.authState == .expired || profile.authState == .needsLogin ? L("Войти в профиль") : L("Запустить CapCut"),
+                    Button { model.startCapCut(profile.id) } label: {
+                        Label(model.launching ? L("Запускаю…") : model.runningProfileID == profile.id ? L("Показать CapCut") : L("Запустить CapCut"),
                             systemImage:model.runningProfileID == profile.id ? "arrow.up.right.square" : "play.fill")
                         .font(.system(size:13,weight:.semibold)).padding(.horizontal,10).padding(.vertical,5)
                     }.buttonStyle(.borderedProminent).controlSize(.large)
-                        .disabled(model.launching || model.browser != nil || model.runningProfileID != nil && model.runningProfileID != profile.id)
+                        .disabled(model.launching || model.browser != nil || model.runningProfileID != nil && model.runningProfileID != profile.id || model.runningProfileID == nil && (profile.authState != .valid || model.checkingProfiles.contains(profile.id)))
                 }
             }.padding(.horizontal,28).padding(.vertical,20)
         }.background(Color(nsColor:.controlBackgroundColor).opacity(0.55))
@@ -303,14 +303,23 @@ struct ProfileEditor: View {
     @FocusState var focused: Bool
     var body: some View {
         VStack(alignment:.leading,spacing:18) {
-            Label(model.editingProfileID == nil ? L("Новый профиль") : L("Название профиля"),systemImage:model.editingProfileID == nil ? "person.crop.circle.badge.plus" : "pencil")
+            Label(model.editingProfileID == nil ? L("Новый профиль") : L("Редактировать профиль"),systemImage:model.editingProfileID == nil ? "person.crop.circle.badge.plus" : "pencil")
                 .font(.system(size:19,weight:.semibold))
-            Text(L("Например, «Личный» или «Работа». У профиля будет свой вход через браузер.")).font(.system(size:12)).foregroundStyle(.secondary)
             TextField(L("Название профиля"),text:$model.profileNameDraft).textFieldStyle(.roundedBorder).focused($focused).onSubmit { model.saveProfileName() }
+            Toggle(L("Автоматический вход"),isOn:$model.profileAutomaticDraft).toggleStyle(.switch)
+            if model.profileAutomaticDraft {
+                TextField(L("Почта CapCut"),text:$model.profileEmailDraft).textFieldStyle(.roundedBorder)
+                SecureField(model.profileHasPassword ? L("Новый пароль (необязательно)") : L("Пароль CapCut"),text:$model.profilePasswordDraft).textFieldStyle(.roundedBorder)
+                Label(L("Пароль сохраняется в Связке ключей этого Mac. Вход выполняется на сайте CapCut в фоне."),systemImage:"lock.shield")
+                    .font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            } else {
+                Text(L("Вход выполняется через окно комплектного браузера.")).font(.system(size:12)).foregroundStyle(.secondary)
+            }
             if !model.editorError.isEmpty { Text(L(model.editorError)).font(.system(size:11)).foregroundStyle(.orange) }
-            HStack { Spacer(); Button(L("Отмена")) { model.profileEditorVisible = false }.keyboardShortcut(.cancelAction)
-                Button(L("Сохранить")) { model.saveProfileName() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction) }
-        }.padding(28).frame(width:380).onAppear { focused = true }
+            HStack { Spacer(); Button(L("Отмена")) { model.dismissProfileEditor() }.keyboardShortcut(.cancelAction)
+                Button(model.editorNeedsSignIn ? L("Сохранить и войти") : L("Сохранить")) { model.saveProfileName() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    .disabled(model.profileNameDraft.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.profileAutomaticDraft && (model.profileEmailDraft.isEmpty || model.profilePasswordDraft.isEmpty && !model.profileHasPassword)) }
+        }.padding(28).frame(width:430).onAppear { focused = true }.onDisappear { model.profilePasswordDraft = "" }
     }
 }
 
@@ -390,8 +399,8 @@ struct SettingsPage: View {
 struct GuidePage: View {
     let model: LauncherModel
     let steps = [
-        (L("Создайте профиль"),L("Нажмите «Добавить профиль», задайте удобное название и сохраните слот."),"person.crop.circle.badge.plus"),
-        (L("Войдите через браузер"),L("В окне CapCut Login войдите в аккаунт. Браузер уже включён в приложение — устанавливать Chrome не требуется."),"safari"),
+        (L("Создайте профиль"),L("Нажмите «Добавить профиль», укажите название, почту и пароль CapCut, затем «Сохранить и войти»."),"person.crop.circle.badge.plus"),
+        (L("Дождитесь подтверждения"),L("Лаунчер входит через комплектный браузер в фоне. После проверки сервером появится «Вход подтверждён», и кнопка запуска станет доступна. При необходимости CapCut откроет окно подтверждения."),"checkmark.shield"),
         (L("Выберите регион"),L("Выберите US, TR, NL или введите другой двухбуквенный код страны. Регион влияет на доступность ресурсов, но не меняет язык и IP-адрес."),"globe.europe.africa"),
         (L("Откройте CapCut"),L("Нажмите «Запустить CapCut». Для смены профиля или региона сначала полностью закройте CapCut. Лаунчер оставляйте работающим."),"play.circle")
     ]
@@ -429,7 +438,7 @@ struct GuidePage: View {
             }.surface()
             VStack(alignment:.leading,spacing:15) {
                 Label(L("Если сессия истекла"),systemImage:"arrow.clockwise.circle").font(.system(size:14,weight:.semibold))
-                Text(L("Профиль получит соответствующий статус после ответа сервера CapCut. Закройте CapCut и нажмите «Войти заново». Ошибка соединения сама по себе не означает, что вход истёк."))
+                Text(L("При истечении сессии лаунчер повторит вход автоматически, если в профиле сохранён пароль. Если CapCut открыт, сначала закройте его. При ошибке проверьте данные в настройках профиля или выберите «Войти через браузер». Ошибка сети сама по себе не означает, что сессия истекла."))
                     .font(.system(size:12)).foregroundStyle(.secondary)
                 Divider()
                 Label(L("Профили и проекты"),systemImage:"folder.badge.person.crop").font(.system(size:14,weight:.semibold))

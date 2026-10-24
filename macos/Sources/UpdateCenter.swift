@@ -27,8 +27,7 @@ final class UpdateCenter: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
     func install() {
         guard isCapCutRunning?() != true else {
-            let alert = NSAlert(); alert.messageText = L("Сначала закройте CapCut")
-            alert.informativeText = L("После закрытия можно установить новую версию лаунчера."); alert.runModal(); return
+            AppDialogs.shared.notice("Сначала закройте CapCut","После закрытия можно установить новую версию лаунчера."); return
         }
         controller?.checkForUpdates(nil)
     }

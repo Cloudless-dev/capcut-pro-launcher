@@ -14,6 +14,7 @@ private extension View {
 struct LauncherRootView: View {
     @ObservedObject var model: LauncherModel
     @ObservedObject private var interface = InterfacePreferences.shared
+    @ObservedObject private var dialogs = AppDialogs.shared
     var body: some View {
         HStack(spacing:0) {
             sidebar.frame(width:190)
@@ -24,6 +25,7 @@ struct LauncherRootView: View {
                 PageScrollView(page:model.destination) {
                     Group {
                         switch model.destination {
+                        case "projects": ProjectsPage(model:model,manager:model.projects)
                         case "guide": GuidePage(model:model)
                         case "settings": SettingsPage(model:model)
                         default: ProfilesPage(model:model)
@@ -35,6 +37,9 @@ struct LauncherRootView: View {
         }
         .environment(\.locale,interface.locale)
         .background(Color(nsColor:.windowBackgroundColor))
+        .disabled(dialogs.current != nil)
+        .accessibilityHidden(dialogs.current != nil)
+        .overlay { AppDialogOverlay() }
         .sheet(isPresented:$model.profileEditorVisible) { ProfileEditor(model:model) }
         .onAppear { model.checkSelectedSession() }
     }
@@ -49,6 +54,7 @@ struct LauncherRootView: View {
             }.padding(.horizontal,8).padding(.top,8)
             VStack(spacing:5) {
                 navigation("profiles",title:L("Профили"),icon:"person.crop.rectangle.stack")
+                navigation("projects",title:L("Проекты"),icon:"film.stack")
                 navigation("guide",title:L("Инструкция"),icon:"book.closed")
                 navigation("settings",title:L("Настройки"),icon:"slider.horizontal.3")
             }
@@ -85,9 +91,9 @@ struct LauncherRootView: View {
     var header: some View {
         HStack(alignment:.center) {
             VStack(alignment:.leading,spacing:5) {
-                Text(model.destination == "settings" ? L("Настройки") : model.destination == "guide" ? L("Инструкция") : L("Профили"))
+                Text(model.destination == "projects" ? L("Проекты") : model.destination == "settings" ? L("Настройки") : model.destination == "guide" ? L("Инструкция") : L("Профили"))
                     .font(.system(size:23,weight:.semibold))
-                Text(model.destination == "settings" ? L("Настройте лаунчер под свой привычный сценарий.") : model.destination == "guide" ? L("Вход, смена региона и работа с профилями.") : L("Отдельный вход и регион для каждого аккаунта."))
+                Text(model.destination == "projects" ? L("Импорт, экспорт и управление локальными проектами.") : model.destination == "settings" ? L("Настройте лаунчер под свой привычный сценарий.") : model.destination == "guide" ? L("Вход, смена региона и работа с профилями.") : L("Отдельный вход и регион для каждого аккаунта."))
                     .font(.system(size:12)).foregroundStyle(.secondary)
             }
             Spacer(minLength:20)
@@ -258,6 +264,7 @@ struct LaunchBar: View {
 
 struct ProfileEditor: View {
     @ObservedObject var model: LauncherModel
+    @ObservedObject private var dialogs = AppDialogs.shared
     @FocusState var focused: Bool
     var body: some View {
         VStack(alignment:.leading,spacing:18) {
@@ -300,6 +307,8 @@ struct ProfileEditor: View {
                 Button(model.editorNeedsSignIn ? L("Сохранить и войти") : L("Сохранить")) { model.saveProfileName() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                     .disabled(model.profileNameDraft.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || model.profileMethodDraft != .capcut && model.profileAutomaticDraft && (model.profileEmailDraft.isEmpty || model.profilePasswordDraft.isEmpty && !model.profileHasPassword)) }
         }.padding(28).frame(width:470).onAppear { focused = true }.onDisappear { model.profilePasswordDraft = "" }
+            .disabled(dialogs.current != nil).accessibilityHidden(dialogs.current != nil)
+            .overlay { AppDialogOverlay() }
     }
 }
 
@@ -429,6 +438,11 @@ struct GuidePage: View {
                 Text(L("Нажмите карандаш у профиля, чтобы изменить регион и настройки входа. Круглая стрелка проверяет сессию, красная корзина удаляет профиль."))
                     .font(.system(size:12)).foregroundStyle(.secondary)
                 Button { model.openProjects() } label: { Label(L("Открыть папку проектов"),systemImage:"folder") }.buttonStyle(.bordered)
+            }.surface()
+            VStack(alignment:.leading,spacing:12) {
+                Label(L("Управление проектами"),systemImage:"film.stack").font(.system(size:14,weight:.semibold))
+                Text(L("В разделе «Проекты» доступны обложки, импорт, экспорт, перенос и удаление выбранных или всех проектов. Для операций полностью закройте CapCut. Удалённые проекты сохраняются в корзине лаунчера и восстанавливаются кнопкой «Восстановить». Очистка отправляет их в системную Корзину macOS. В экспорте выберите «Со всеми материалами», чтобы собрать исходники и обновить связи, или «Только проект», чтобы оставить прежние пути."))
+                    .font(.system(size:12)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             }.surface()
             Text(L("Pro-интерфейс включён при каждом запуске. Подписку и разрешение экспорта проверяет CapCut. Лаунчер — независимое приложение."))
                 .font(.system(size:11)).foregroundStyle(.secondary).padding(.horizontal,4)

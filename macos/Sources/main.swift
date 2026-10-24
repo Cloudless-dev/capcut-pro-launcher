@@ -9,7 +9,7 @@ final class LauncherApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         NSApp.setActivationPolicy(.regular)
         do { model = try LauncherModel() }
-        catch { let alert = NSAlert(); alert.messageText = L("Не удалось открыть профили"); alert.informativeText = L(error.localizedDescription); alert.runModal(); NSApp.terminate(nil); return }
+        catch { showStartupError(error); return }
         InterfacePreferences.shared.apply()
         NotificationCenter.default.addObserver(self,selector:#selector(interfaceChanged),name:InterfacePreferences.changed,object:nil)
         setupMenu()
@@ -24,6 +24,14 @@ final class LauncherApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         content.autoresizingMask = [.width,.height]
         window.contentView = content
         window.contentMinSize = NSSize(width:820,height:650)
+        window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
+    }
+    private func showStartupError(_ error:Error) {
+        InterfacePreferences.shared.apply()
+        window = NSWindow(contentRect:NSRect(x:0,y:0,width:620,height:430),styleMask:[.titled,.closable],backing:.buffered,defer:false)
+        window.title = "CapCut Launcher"; window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView:AppDialogOverlay().background(Color(nsColor:.windowBackgroundColor)))
+        AppDialogs.shared.notice("Не удалось открыть профили",error.localizedDescription) { NSApp.terminate(nil) }
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
     }
     @objc func interfaceChanged() { setupMenu() }
@@ -41,11 +49,14 @@ final class LauncherApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func settings() { model.destination = "settings"; showWindow() }
     @objc func guide() { model.destination = "guide"; showWindow() }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true) }
-    @objc func about() { let alert = NSAlert(); alert.messageText = "CapCut Launcher \(model.version)"; alert.informativeText = L("Профили, вход через браузер и выбор региона.\nНезависимый лаунчер для официального CapCut."); alert.runModal() }
+    @objc func about() { showWindow(); AppDialogs.shared.notice("CapCut Launcher \(model.version)","Профили, вход через браузер и выбор региона.\nНезависимый лаунчер для официального CapCut.") }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+        if model.projects.working {
+            showWindow(); AppDialogs.shared.notice("Дождитесь завершения операции с проектами."); return .terminateCancel
+        }
         if model.helper?.isRunning == true {
-            showWindow(); let alert = NSAlert(); alert.messageText = L("Сначала закройте CapCut")
-            alert.informativeText = L("Лаунчер сопровождает текущий запуск. После закрытия CapCut можно выйти."); alert.runModal(); return .terminateCancel
+            showWindow(); AppDialogs.shared.notice("Сначала закройте CapCut","Лаунчер сопровождает текущий запуск. После закрытия CapCut можно выйти."); return .terminateCancel
         }
         model.checks.values.forEach{$0.terminate()}; return .terminateNow
     }

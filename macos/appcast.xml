@@ -6,6 +6,13 @@
     <description>Signed updates for the Apple Silicon macOS launcher.</description>
     <language>en</language>
     <item>
+      <title>CapCut Launcher 0.05</title>
+      <pubDate>Sat, 24 Oct 2026 12:44:13 +0000</pubDate>
+      <description>Project management, import, export and recovery.</description>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/Cloudless-dev/capcut-pro-launcher/releases/download/macos-v0.05/CapCut-Launcher-0.05-macOS-arm64.zip" length="214416118" type="application/octet-stream" sparkle:edSignature="GhI6PElI0dOWkWuSXFRJtVMz+1HaUnnZV47FVjsXYcW6QkKh63hczMTZvvwViJZo8TCKAug9Xy25YBgaRcWPAQ==" sparkle:version="7" sparkle:shortVersionString="0.05" sparkle:os="macos" />
+    </item>
+    <item>
       <title>CapCut Launcher 0.04</title>
       <pubDate>Thu, 22 Oct 2026 13:01:56 +0000</pubDate>
       <description>Improved sign-in and profile management.</description>

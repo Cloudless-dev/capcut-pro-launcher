@@ -29,6 +29,7 @@ final class LauncherModel: ObservableObject {
     let nativeAccounts: NativeAccountStore
     var capcutIsRunning: () -> Bool = NativeAccountStore.isCapCutRunning
     let updates = UpdateCenter()
+    let projects = ProjectManager()
     var helper: Process?
     var browser: BrowserLogin?
     var checks: [String:Process] = [:]
@@ -169,10 +170,12 @@ final class LauncherModel: ObservableObject {
     }
     func deleteProfile(_ profile: LauncherProfile) {
         guard profile.id != runningProfileID, profile.id != browserProfileID else { showError("Сначала закройте CapCut и окно входа этого профиля."); return }
-        let alert = NSAlert(); alert.messageText = L("Удалить профиль «\(profile.name)»?")
-        alert.informativeText = profile.usesCapCutAccount ? L("Будет удалён только профиль лаунчера. Вход в приложении CapCut и локальные проекты сохранятся.") : L("Будут удалены вход в Keychain и браузерный профиль этого слота. Локальные проекты CapCut сохранятся.")
-        alert.addButton(withTitle:L("Удалить профиль")); alert.addButton(withTitle:L("Отмена")); alert.alertStyle = .warning
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            let response = await AppDialogs.shared.choose(title:"Удалить профиль «\(profile.name)»?",
+                message:profile.usesCapCutAccount ? "Будет удалён только профиль лаунчера. Вход в приложении CapCut и локальные проекты сохранятся." : "Будут удалены вход в Keychain и браузерный профиль этого слота. Локальные проекты CapCut сохранятся.",
+                symbol:"person.crop.circle.badge.minus",actions:[AppDialogAction(title:"Отмена",cancel:true),AppDialogAction(title:"Удалить профиль",destructive:true)])
+            guard response == 1, document.profiles.contains(where:{$0.id == profile.id}) else { return }
+            guard profile.id != runningProfileID, profile.id != browserProfileID else { showError("Сначала закройте CapCut и окно входа этого профиля."); return }
         do {
             checks[profile.id]?.terminate(); checks[profile.id] = nil; checkingProfiles.remove(profile.id)
             let directory = try store.directory(profile.id)
@@ -184,6 +187,7 @@ final class LauncherModel: ObservableObject {
             if document.selectedProfileID == profile.id { document.selectedProfileID = document.profiles.first?.id }
             persist(); status = "Профиль удалён. Проекты CapCut сохранены."; statusIsError = false
         } catch { showError(error.localizedDescription) }
+        }
     }
     @discardableResult func setRegion(_ text: String, profileID: String) -> Bool {
         guard runningProfileID != profileID else { return false }

@@ -33,6 +33,7 @@ struct LauncherProfile: Codable, Identifiable, Equatable {
 struct LauncherSettings: Codable, Equatable {
     var appPath = "/Applications/CapCut.app"
     var dataRoot = NSHomeDirectory()+"/Movies/CapCut/User Data"
+    var projectsRoot: String?
     var automaticUpdates = false
     var autoStartAfterAuth = true
 }

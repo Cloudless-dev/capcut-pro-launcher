@@ -98,7 +98,7 @@ final class BrowserLogin: NSObject {
         onFailure?()
         if automatic { return }
         NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert(); alert.messageText = L("Вход в CapCut"); alert.informativeText = L(text); alert.runModal()
+        AppDialogs.shared.notice("Вход в CapCut",text)
     }
     func form(_ values: [String: String]) -> Data {
         var components = URLComponents(); components.queryItems = values.map { URLQueryItem(name: $0.key, value: $0.value) }

@@ -9,6 +9,8 @@ final class InterfacePreferences: ObservableObject {
     private let defaults: UserDefaults
     @Published var language: String { didSet { defaults.set(language,forKey:"interfaceLanguage"); apply() } }
     @Published var theme: String { didSet { defaults.set(theme,forKey:"interfaceTheme"); apply() } }
+    @Published var interfaceSize: String { didSet { defaults.set(interfaceSize,forKey:"interfaceSize"); apply() } }
+    var interfaceScale: CGFloat { interfaceSize == "small" ? 0.88 : interfaceSize == "large" ? 1.14 : 1 }
     var effectiveLanguage: String { Self.resolve(language,preferred:Locale.preferredLanguages) }
     var locale: Locale { Locale(identifier:effectiveLanguage) }
     init(defaults:UserDefaults = .standard) {
@@ -16,7 +18,9 @@ final class InterfacePreferences: ObservableObject {
         let saved = defaults.string(forKey:"interfaceLanguage") ?? "system"
         language = ["system","ru","en"].contains(saved) ? saved : "system"
         let appearance = defaults.string(forKey:"interfaceTheme") ?? "system"
-        theme = ["system","light","dark"].contains(appearance) ? appearance : "system"
+        theme = ["system","light","gray","dark"].contains(appearance) ? appearance : "system"
+        let density = defaults.string(forKey:"interfaceSize") ?? "medium"
+        interfaceSize = ["small","medium","large"].contains(density) ? density : "medium"
     }
     static func resolve(_ selection:String,preferred:[String]) -> String {
         if ["ru","en"].contains(selection) { return selection }
@@ -27,7 +31,7 @@ final class InterfacePreferences: ObservableObject {
         return "en"
     }
     func apply() {
-        NSApp?.appearance = theme == "light" ? NSAppearance(named:.aqua) : theme == "dark" ? NSAppearance(named:.darkAqua) : nil
+        NSApp?.appearance = theme == "light" ? NSAppearance(named:.aqua) : ["gray","dark"].contains(theme) ? NSAppearance(named:.darkAqua) : nil
         NotificationCenter.default.post(name:Self.changed,object:nil)
     }
 }

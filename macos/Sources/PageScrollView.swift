@@ -52,7 +52,7 @@ struct PageScrollView<Content:View>: NSViewRepresentable {
         @ObservedObject private var interface = InterfacePreferences.shared
         let content:Content
         let width:CGFloat
-        var body:some View { content.environment(\.locale,interface.locale).frame(width:width).fixedSize(horizontal:false,vertical:true) }
+        var body:some View { content.veilContext().frame(width:width).fixedSize(horizontal:false,vertical:true) }
     }
 }
 

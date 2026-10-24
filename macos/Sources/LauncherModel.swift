@@ -96,9 +96,18 @@ final class LauncherModel: ObservableObject {
         else { verifySession(profile.id) }
     }
     func checkSelectedProfile(_ id: String) {
-        guard let p = document.profiles.first(where:{$0.id == id}) else { return }
-        if p.usesCapCutAccount || p.authState != .signedOut { verifySession(id) }
-        else { recoverSession(id) }
+        guard !checkingProfiles.contains(id), browserProfileID != id, runningProfileID != id,
+              document.profiles.contains(where:{$0.id == id}) else { return }
+        checkingProfiles.insert(id)
+        Task { @MainActor in
+            // Yield before local Keychain/defaults reads so even an immediate
+            // "no session" result has visible feedback at the clicked control.
+            try? await Task.sleep(nanoseconds:200_000_000)
+            defer { if checks[id] == nil { checkingProfiles.remove(id) } }
+            guard let p = document.profiles.first(where:{$0.id == id}), runningProfileID != id else { return }
+            if p.usesCapCutAccount || p.authState != .signedOut { verifySession(id) }
+            else { recoverSession(id) }
+        }
     }
     func updateProfile(_ id: String, _ update: (inout LauncherProfile) -> Void) {
         guard let index = document.profiles.firstIndex(where:{$0.id == id}) else { return }
@@ -127,6 +136,15 @@ final class LauncherModel: ObservableObject {
         do {
             let region = try ProfileStore.countryCode(profileRegionDraft)
             let id = editingProfileID ?? UUID().uuidString
+            // Editing a native profile's name/region must not re-import its
+            // account or ask Keychain to authorize unrelated credential reads.
+            if let index = document.profiles.firstIndex(where:{$0.id == id}),
+               document.profiles[index].usesCapCutAccount, profileMethodDraft == .capcut {
+                var next = document
+                next.profiles[index].name = name; next.profiles[index].region = region
+                try store.save(next); document = next
+                dismissProfileEditor(); return
+            }
             let priorCredentials = try CredentialStore.load(id)
             var next = document
             let existing = next.profiles.firstIndex(where:{$0.id == id})
@@ -190,15 +208,16 @@ final class LauncherModel: ObservableObject {
         }
     }
     @discardableResult func setRegion(_ text: String, profileID: String) -> Bool {
-        guard runningProfileID != profileID else { return false }
         do {
             let code = try ProfileStore.countryCode(text)
-            if document.profiles.first(where:{$0.id == profileID})?.region != code {
-                updateProfile(profileID){$0.region = code}
-            }
+            guard let index = document.profiles.firstIndex(where:{$0.id == profileID}) else { return false }
+            guard document.profiles[index].region != code else { return true }
+            var next = document; next.profiles[index].region = code
+            try store.save(next); document = next
+            status = runningProfileID == profileID ? "Регион сохранён. Применится при следующем запуске CapCut." : "Регион профиля сохранён."
+            statusIsError = false
             return true
-        }
-        catch { showError(error.localizedDescription); return false }
+        } catch { showError(error.localizedDescription); return false }
     }
     func setAutomaticUpdates(_ value: Bool) { document.settings.automaticUpdates = value; persist(); updates.configure(automatic:value) }
     func setAutoStart(_ value: Bool) { document.settings.autoStartAfterAuth = value; persist() }
@@ -386,7 +405,7 @@ final class LauncherModel: ObservableObject {
     }
     func markValid(_ id: String) {
         guard let p = document.profiles.first(where:{$0.id == id}) else { return }
-        if p.authState != .valid || Date().timeIntervalSince(p.lastVerified ?? .distantPast) > 60 {
+        if p.authState != .valid || checks[id] != nil || Date().timeIntervalSince(p.lastVerified ?? .distantPast) > 60 {
             updateProfile(id){$0.authState = .valid; $0.lastVerified = Date()}
         }
     }

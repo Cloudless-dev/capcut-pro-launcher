@@ -66,14 +66,16 @@ struct AppDialog: Identifiable {
 }
 
 struct LauncherActionStyle: ButtonStyle {
+    @ObservedObject private var interface = InterfacePreferences.shared
+    @Environment(\.veil) private var palette
     var destructive = false
     var prominent = false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         let color: Color = destructive ? .red : .accentColor
-        configuration.label.font(.system(size:12,weight:.semibold))
-            .padding(.horizontal,14).padding(.vertical,10)
-            .foregroundStyle(enabled ? (prominent ? Color.white : destructive ? Color.red : Color.primary) : Color.secondary)
+        configuration.label.font(.veil(size:12,weight:.semibold))
+            .padding(.horizontal,V(14)).padding(.vertical,V(10))
+            .foregroundStyle(enabled ? (prominent ? destructive ? Color.white : palette.onPrimary : destructive ? Color.red : Color.primary) : Color.secondary)
             .background(enabled && prominent ? color.opacity(configuration.isPressed ? 0.75 : 1) : color.opacity(destructive && enabled ? 0.10 : configuration.isPressed ? 0.12 : 0.055),in:RoundedRectangle(cornerRadius:9))
             .overlay(RoundedRectangle(cornerRadius:9).stroke(color.opacity(destructive && enabled && !prominent ? 0.20 : 0),lineWidth:1))
             .opacity(enabled ? 1 : 0.5)
@@ -81,46 +83,48 @@ struct LauncherActionStyle: ButtonStyle {
 }
 
 struct AppDialogOverlay: View {
+    @ObservedObject private var interface = InterfacePreferences.shared
+    @Environment(\.veil) private var palette
     @ObservedObject private var dialogs = AppDialogs.shared
     @FocusState private var cancelFocused: Bool
     var body: some View {
         if let dialog = dialogs.current {
             ZStack {
                 Color.black.opacity(0.28).ignoresSafeArea().contentShape(Rectangle()).onTapGesture { }
-                VStack(alignment:.leading,spacing:18) {
-                    HStack(alignment:.top,spacing:13) {
-                        Image(systemName:dialog.symbol).font(.system(size:23,weight:.medium))
+                VStack(alignment:.leading,spacing:V(18)) {
+                    HStack(alignment:.top,spacing:V(13)) {
+                        Image(systemName:dialog.symbol).font(.veil(size:23,weight:.medium))
                             .foregroundStyle(dialog.actions.contains(where:{$0.destructive}) ? Color.red : Color.accentColor)
-                            .frame(width:44,height:44).background(Color.primary.opacity(0.045),in:RoundedRectangle(cornerRadius:12))
-                        Text(L(dialog.title)).font(.system(size:20,weight:.semibold)).fixedSize(horizontal:false,vertical:true)
-                            .frame(maxWidth:.infinity,alignment:.leading).padding(.top,8)
+                            .frame(width:V(44),height:V(44)).background(Color.primary.opacity(0.045),in:RoundedRectangle(cornerRadius:12))
+                        Text(L(dialog.title)).font(.veil(size:20,weight:.semibold)).fixedSize(horizontal:false,vertical:true)
+                            .frame(maxWidth:.infinity,alignment:.leading).padding(.top,V(8))
                     }
                     if !dialog.names.isEmpty {
-                        VStack(alignment:.leading,spacing:7) {
+                        VStack(alignment:.leading,spacing:V(7)) {
                             ForEach(Array(dialog.names.prefix(6).enumerated()),id:\.offset) { _,name in
                                 Label(name,systemImage:"film").lineLimit(1).help(name)
                             }
                             if dialog.names.count > 6 {
                                 Text(L("…и ещё \(dialog.names.count-6)"))
-                                    .foregroundStyle(.secondary).padding(.top,3)
+                                    .foregroundStyle(.secondary).padding(.top,V(3))
                             }
-                        }.font(.system(size:12)).padding(13).frame(maxWidth:.infinity,alignment:.leading)
+                        }.font(.veil(size:12)).padding(V(13)).frame(maxWidth:.infinity,alignment:.leading)
                             .background(Color.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:10))
                     }
                     if !dialog.message.isEmpty {
-                        Text(L(dialog.message)).font(.system(size:12)).foregroundStyle(.secondary)
+                        Text(L(dialog.message)).font(.veil(size:12)).foregroundStyle(.secondary)
                             .fixedSize(horizontal:false,vertical:true)
                     }
                     if let location = dialog.location {
-                        VStack(alignment:.leading,spacing:5) {
-                            Text(L("Новое расположение")).font(.system(size:11,weight:.semibold))
-                            Text(location).font(.system(size:11,design:.monospaced)).foregroundStyle(.secondary)
+                        VStack(alignment:.leading,spacing:V(5)) {
+                            Text(L("Новое расположение")).font(.veil(size:11,weight:.semibold))
+                            Text(location).font(.veil(size:11,design:.monospaced)).foregroundStyle(.secondary)
                                 .textSelection(.enabled).fixedSize(horizontal:false,vertical:true).lineLimit(3)
-                        }.padding(12).frame(maxWidth:.infinity,alignment:.leading)
+                        }.padding(V(12)).frame(maxWidth:.infinity,alignment:.leading)
                             .background(Color.primary.opacity(0.035),in:RoundedRectangle(cornerRadius:9))
                     }
-                    HStack(spacing:10) {
-                        Spacer(minLength:0)
+                    HStack(spacing:V(10)) {
+                        Spacer(minLength:V(0))
                         ForEach(Array(dialog.actions.enumerated()),id:\.offset) { index,action in
                             if action.cancel {
                                 Button(L(action.title)) { dialogs.resolve(index,id:dialog.id) }
@@ -131,12 +135,12 @@ struct AppDialogOverlay: View {
                                     .buttonStyle(LauncherActionStyle(destructive:action.destructive,prominent:true))
                             }
                         }
-                    }.padding(.top,4)
-                }.padding(26).frame(maxWidth:530)
-                    .background(Color(nsColor:.windowBackgroundColor),in:RoundedRectangle(cornerRadius:20))
+                    }.padding(.top,V(4))
+                }.padding(V(26)).frame(maxWidth:530)
+                    .background(palette.card,in:RoundedRectangle(cornerRadius:20))
                     .overlay(RoundedRectangle(cornerRadius:20).stroke(Color.primary.opacity(0.09)))
                     .shadow(color:.black.opacity(0.18),radius:30,y:12)
-                    .padding(24).id(dialog.id)
+                    .padding(V(24)).id(dialog.id)
                     .onAppear { cancelFocused = true }
                     .accessibilityElement(children:.contain)
                     .accessibilityLabel(L(dialog.title))

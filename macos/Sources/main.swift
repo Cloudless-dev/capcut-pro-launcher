@@ -13,7 +13,8 @@ final class LauncherApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         InterfacePreferences.shared.apply()
         NotificationCenter.default.addObserver(self,selector:#selector(interfaceChanged),name:InterfacePreferences.changed,object:nil)
         setupMenu()
-        window = NSWindow(contentRect:NSRect(x:0,y:0,width:980,height:750),styleMask:[.titled,.closable,.resizable,.miniaturizable],backing:.buffered,defer:false)
+        window = NSWindow(contentRect:NSRect(x:0,y:0,width:1080,height:760),styleMask:[.titled,.closable,.resizable,.miniaturizable,.fullSizeContentView],backing:.buffered,defer:false)
+        window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
         window.title = "CapCut Launcher"; window.minSize = NSSize(width:820,height:650)
         window.isReleasedWhenClosed = false; window.delegate = self
         let content = NSHostingView(rootView:LauncherRootView(model:model))

@@ -49,7 +49,7 @@ final class BrowserLogin: NSObject {
                 self?.cancelled = true; self?.exchangeTask?.cancel(); self?.onClose?()
             } }
             try p.run()
-            var config: [String:Any] = ["nonce":nonce,"state":state,"stateRoot":profileRoot.path,"language":InterfacePreferences.shared.effectiveLanguage,"theme":InterfacePreferences.shared.theme]
+            var config: [String:Any] = ["nonce":nonce,"state":state,"stateRoot":profileRoot.path,"language":InterfacePreferences.shared.effectiveLanguage,"theme":InterfacePreferences.shared.theme == "gray" ? "dark" : InterfacePreferences.shared.theme]
             if let credentials { config["credentials"] = ["email":credentials.email,"password":credentials.password] }
             send(config); credentials = nil
             onStatus?(automatic ? "Выполняю автоматический вход…" : "Окно входа открыто. Войдите на сайте CapCut.")

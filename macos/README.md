@@ -1,6 +1,6 @@
 # CapCut Launcher для macOS
 
-[Скачать DMG](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.051)
+[Скачать DMG](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.052)
 
 Требуется macOS 14+, Apple Silicon (M-серия) и официальный CapCut с сайта производителя. Intel пока не поддерживается. Устанавливать Chrome, Python или Xcode для запуска не нужно.
 

@@ -29,6 +29,31 @@ function regionHeadersAllowed(raw) {
     !/[?&](?:sign|signature|x-bogus|x-signature|x-amz-signature|x-goog-signature)=/i.test(raw.split('#')[0]);
 }
 const regionHeaderNames = new Set(['store-country-code', 'x-tt-store-region', 'x-tt-region']);
+// Some native resource panels percent-encode a search term inside JSON.
+// The API expects a JSON string, so Cyrillic must be decoded once here, while
+// URL parameters, signed downloads and all other request fields stay intact.
+function resourceSearchURL(raw) {
+  const m=/^https:\/\/([a-z0-9.-]+)(?::443)?(\/[^?#]*)/i.exec(raw);
+  return !!m && safeDomain(m[1].toLowerCase()) &&
+    /^(?:\/artist\/v1\/(?:effect|panel)\/|\/lv\/v1\/)/.test(m[2]) &&
+    /(?:^|\/|_)search(?:\/|_|$)/i.test(m[2]) &&
+    !/[?&](?:sign|signature|x-bogus|x-signature|x-amz-signature|x-goog-signature)=/i.test(raw.split('#')[0]);
+}
+function normalizeResourceSearchBody(body) {
+  if (typeof body !== 'string' || body.length>262144) return body;
+  try { JSON.parse(body); } catch (_) { return body; }
+  // Replace only string literals at known search keys. Re-serializing the whole
+  // JSON would round 64-bit IDs or alter unrelated escaping and formatting.
+  return body.replace(/("(?:query|keyword|search_word|search_text|search_query|search_keyword)"\s*:\s*)("(?:\\.|[^"\\])*")/g,
+    (_,prefix,literal)=>{
+      try {
+        const original=JSON.parse(literal);
+        if(!/%[0-9a-f]{2}/i.test(original))return prefix+literal;
+        const decoded=decodeURIComponent(original);
+        return /[\u0400-\u052f]/.test(decoded) ? prefix+JSON.stringify(decoded) : prefix+literal;
+      } catch (_) {return prefix+literal;}
+    });
+}
 function nativeAccountURL(raw, host) {
   if (!['passport-api-sg.capcutapi.com','passport16-normal-us-ttp.capcutapi.us'].includes(host)) return raw;
   const m=/^https:\/\/([a-z0-9.-]+)(?::443)?(\/passport\/(?:account\/info|token\/beat)\/v2\/[^#]*)$/i.exec(raw);
@@ -137,6 +162,46 @@ Process.attachModuleObserver({onAdded(module) {
   const nameSet = fn('Cronet_HttpHeader_name_set','void',['pointer','pointer']);
   const valueSet = fn('Cronet_HttpHeader_value_set','void',['pointer','pointer']);
   const bufferData = fn('Cronet_Buffer_GetData','pointer',['pointer']);
+  let trackSearchUpload=()=>{};
+  const uploadNames=['Cronet_UrlRequestParams_upload_data_provider_get','Cronet_UploadDataProvider_Read',
+    'Cronet_UploadDataProvider_CreateWith','Cronet_UploadDataSink_OnReadSucceeded','Cronet_UploadDataProvider_Close'];
+  const uploadAddresses=uploadNames.map(n=>module.findExportByName(n));
+  if(uploadAddresses.every(p=>p!==null)) {
+    const providerGet=new NativeFunction(uploadAddresses[0],'pointer',['pointer']);
+    const providers=new Map(),sinks=new Map(),readHooks=new Set();
+    function readUpload(a) {
+      const entry=providers.get(a[0].toString());
+      if(entry)sinks.set(a[1].toString(),{...entry,buffer:a[2]});
+    }
+    function attachRead(address) {
+      if(address.isNull()||readHooks.has(address.toString()))return;
+      readHooks.add(address.toString());Interceptor.attach(address,{onEnter:readUpload});
+    }
+    attachRead(uploadAddresses[1]);
+    Interceptor.attach(uploadAddresses[2],{onEnter(a){attachRead(a[1]);}});
+    Interceptor.attach(uploadAddresses[4],{onEnter(a){providers.delete(a[0].toString());}});
+    Interceptor.attach(uploadAddresses[3],{onEnter(a){
+      const key=a[0].toString(),entry=sinks.get(key);sinks.delete(key);
+      if(!entry)return;
+      try {
+        const n=a[1].toUInt32();if(!n||n>262144)return;
+        const data=bufferData(entry.buffer),body=data.readUtf8String(n);
+        const changed=normalizeResourceSearchBody(body);if(changed===body)return;
+        const bytes=Array.from(unescape(encodeURIComponent(changed)),c=>c.charCodeAt(0));
+        if(bytes.length>n)return;
+        // Keep the declared upload size and callback length. JSON permits
+        // trailing whitespace; no buffer growth or native ownership changes.
+        while(bytes.length<n)bytes.push(32);
+        data.writeByteArray(bytes);emit('search_query_normalized',{path:entry.path});
+      } catch (_) {emit('hook_error',{stage:'resource_search'});}
+    }});
+    trackSearchUpload=(params,url)=>{
+      if(!resourceSearchURL(url))return;
+      const provider=providerGet(params);
+      if(!provider.isNull())providers.set(provider.toString(),{path:url.split('?')[0].replace(/^https:\/\/[^/]+/,'')});
+    };
+  }
+
   function put(p,name,value) {
     if (!value) return;
     const encoded=Memory.allocUtf8String(value);
@@ -153,6 +218,7 @@ Process.attachModuleObserver({onAdded(module) {
         let url=a[2].readUtf8String();
         const m=/^https:\/\/([a-z0-9.-]+)(?::443)?\//i.exec(url);
         if (!m || !safeDomain(m[1].toLowerCase())) return;
+        trackSearchUpload(a[3],url);
         if (/\/passport\/(?:web\/)?logout(?:[/?]|$)/.test(url)) {
           sessionActive=false;nativeAuthActive=false;emit('session_logout');return;
         }

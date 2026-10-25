@@ -1,6 +1,6 @@
 # CapCut Launcher
 
-Вход через браузер, сохранённые профили и выбор региона CapCut. Интерфейс на русском и английском.
+Неофициальный лаунчер для удобного запуска CapCut с дополнительными функциями. Интерфейс на русском и английском.
 
 - [Скачать для Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
 - [Скачать для macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.053) — macOS 14+, Apple Silicon (M-серия). Intel пока не поддерживается.
@@ -23,7 +23,7 @@
 
 ## English
 
-Browser sign-in, saved profiles and CapCut region selection. Russian and English interface.
+An unofficial launcher for convenient CapCut startup with additional features. Russian and English interface.
 
 - [Download for Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
 - [Download for macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.053) — macOS 14+, Apple Silicon. No Intel build yet.

@@ -1,6 +1,7 @@
-"""Region + Pro UI only. No diagnostic collection or backup files."""
+"""Launch with the selected region and profile, without diagnostic collection."""
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 import sys
@@ -24,7 +25,8 @@ def main():
     source = ('globalThis.CAPCUT_LOCAL_REGION=' + json.dumps(args.region) + ';\n'
               'globalThis.CAPCUT_QUIET=true;\n'
               + (source_root / 'guard_capcut_region.js').read_text('utf-8') + '\n'
-              + (source_root / 'show_capcut_pro_ui.js').read_text('utf-8'))
+              + (source_root / 'show_capcut_pro_ui.js').read_text('utf-8') + '\n'
+              + (source_root / 'resource_search.js').read_text('utf-8'))
     source += '\n' + auth_source()
     if not APP.is_file():
         raise RuntimeError('CapCut executable is missing: ' + str(APP))
@@ -96,4 +98,41 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    from capcut_native_account import NativeAccountJournal
+    journal = NativeAccountJournal()
+    def capcut_running():
+        return any(p.name.lower() == 'capcut.exe' for p in frida.get_local_device().enumerate_processes())
+    managed = os.environ.get('CAPCUT_MANAGED_PROFILE') == '1'
+    check_only = '--check-only' in sys.argv
+    journal_started = False
+    launch_lock = None
+    try:
+        if not check_only:
+            import msvcrt
+            journal.path.parent.mkdir(parents=True, exist_ok=True)
+            launch_lock = (journal.path.parent / 'launch.lock').open('a+b')
+            if launch_lock.seek(0, 2) == 0:
+                launch_lock.write(b'0')
+                launch_lock.flush()
+            launch_lock.seek(0)
+            try:
+                msvcrt.locking(launch_lock.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                raise RuntimeError('Another launcher helper is already active.') from None
+            if capcut_running():
+                raise RuntimeError('Close CapCut before starting this profile.')
+            journal.restore()  # Recover an interrupted managed launch first.
+            if managed:
+                journal.begin()
+                journal_started = True
+        main()
+    except (ValueError, RuntimeError) as error:
+        print('CAPCUT_ERROR ' + str(error), file=sys.stderr, flush=True)
+        raise SystemExit(1) from None
+    finally:
+        try:
+            if journal_started and not capcut_running():
+                journal.restore()
+        finally:
+            if launch_lock is not None:
+                launch_lock.close()

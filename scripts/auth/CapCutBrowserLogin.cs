@@ -27,13 +27,21 @@ internal sealed class LoginWindow : Form {
     readonly Timer timer = new Timer();
     readonly string nonce = Guid.NewGuid().ToString("N");
     string state;
+    readonly Timer automaticTimer = new Timer();
+    Dictionary<string,string> credentials;
+    string loginStage = "initial";
+    bool automaticBusy;
     bool busy;
     bool attempted;
+    bool backgroundLogin, interactionRequired;
+    readonly DateTime automaticStarted=DateTime.UtcNow;
 
     internal LoginWindow(string workspace) {
         root = workspace;
         UiText.Initialize(workspace);
         stateRoot = Environment.GetEnvironmentVariable("CAPCUT_STATE_ROOT") ?? Path.Combine(root, "local");
+        LoadCredentials();backgroundLogin=credentials!=null;
+        if(backgroundLogin){Opacity=0;ShowInTaskbar=false;}
         string iconPath = Path.Combine(root, "assets", "launcher.ico");
         if (File.Exists(iconPath)) Icon = new Icon(iconPath);
         Text = UiText.Get("CapCut — вход через email");
@@ -42,6 +50,7 @@ internal sealed class LoginWindow : Form {
         Font = new Font("Segoe UI", 10);
         Size = new Size(1100, 850); MinimumSize = new Size(800, 650);
         StartPosition = FormStartPosition.CenterScreen;
+        if(backgroundLogin){StartPosition=FormStartPosition.Manual;Location=new Point(-20000,-20000);}
         address.Dock = DockStyle.Top; address.Height = 28;
         address.Text = "https://www.capcut.com/login";
         address.Padding = new Padding(8, 5, 0, 0);
@@ -61,7 +70,8 @@ internal sealed class LoginWindow : Form {
             if (!attempted && IsReadyPage()) await RequestGrant();
         };
         Shown += async delegate { await InitializeBrowser(); };
-        FormClosed += delegate { timer.Dispose(); browser.Dispose(); };
+        FormClosed += delegate { timer.Dispose(); automaticTimer.Dispose(); if(credentials!=null)credentials.Clear(); browser.Dispose(); };
+        automaticTimer.Interval=1500; automaticTimer.Tick+=async delegate { await AutomaticLogin(); };
     }
 
     bool IsReadyPage() {
@@ -94,8 +104,53 @@ internal sealed class LoginWindow : Form {
                 if (Uri.TryCreate(e.Uri, UriKind.Absolute, out uri) && uri.Scheme == "https") browser.CoreWebView2.Navigate(e.Uri);
             };
             browser.CoreWebView2.Navigate("https://www.capcut.com/login");
-            WriteStatus("waiting_for_manual_login", "");
+            if(credentials!=null)automaticTimer.Start();
+            WriteStatus(backgroundLogin?"automatic_login":"waiting_for_manual_login", "");
         } catch (Exception ex) { Fail("browser_init", ex.GetType().Name); }
+    }
+
+    void LoadCredentials() {
+        if(Environment.GetEnvironmentVariable("CAPCUT_AUTOMATIC_LOGIN")=="0")return;
+        string file=Path.Combine(stateRoot,"credentials.json");
+        if(!File.Exists(file))return;
+        try {
+            string packed=json.Deserialize<string>(File.ReadAllText(file));
+            byte[] bytes=ProtectedData.Unprotect(Convert.FromBase64String(packed),null,DataProtectionScope.CurrentUser);
+            try { credentials=json.Deserialize<Dictionary<string,string>>(Encoding.UTF8.GetString(bytes)); }
+            finally {Array.Clear(bytes,0,bytes.Length);}
+        } catch { credentials=null; }
+    }
+    async Task AutomaticLogin() {
+        if(automaticBusy||busy||interactionRequired||browser.CoreWebView2==null)return;
+        if(DateTime.UtcNow-automaticStarted>TimeSpan.FromMinutes(3)){Fail("automatic_login_timeout","");return;}
+        if(credentials==null){if(loginStage=="password_submitted")try{await ObserveLoginResult();}catch{Fail("automatic_login_error","");}return;}
+        Uri uri;
+        if(!Uri.TryCreate(browser.CoreWebView2.Source,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="www.capcut.com")return;
+        automaticBusy=true;
+        try {
+            string script=File.ReadAllText(Path.Combine(root,"scripts/auth/auto_login.js"));
+            string result=await browser.CoreWebView2.ExecuteScriptAsync("("+script+")("+json.Serialize(credentials)+","+json.Serialize(loginStage)+")");
+            var reply=json.Deserialize<Dictionary<string,object>>(result);object action;
+            if(reply!=null&&reply.TryGetValue("action",out action)) {
+                string next=Convert.ToString(action);
+                if(next=="interaction"){RevealForInteraction();return;}
+                if(next=="error"){Fail("automatic_login_rejected","");return;}
+                if(next=="password_submitted"){loginStage=next;credentials.Clear();credentials=null;}
+                else if(next!="waiting")loginStage=next;
+                if(DateTime.UtcNow-automaticStarted>TimeSpan.FromSeconds(60)&&loginStage!="email_submitted"&&loginStage!="password_submitted")RevealForInteraction();
+            }
+        } catch {Fail("automatic_login_error","");}
+        finally {automaticBusy=false;}
+    }
+    async Task ObserveLoginResult(){
+        if(IsReadyPage())return;
+        string result=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const visible=e=>e&&e.getBoundingClientRect().height>0;const nodes=[...document.querySelectorAll('[role=alert],[class*=error]')].filter(visible);if(nodes.some(e=>/incorrect|invalid|wrong|too many|неверн|слишком много/i.test(e.textContent)))return 'error';return [...document.querySelectorAll('input[autocomplete=one-time-code],iframe[title*=captcha i]')].some(visible)?'interaction':'waiting'})()");
+        if(result=="\"error\"")Fail("automatic_login_rejected","");else if(result=="\"interaction\"")RevealForInteraction();
+    }
+    void RevealForInteraction(){
+        if(credentials!=null){credentials.Clear();credentials=null;}automaticTimer.Stop();interactionRequired=true;Opacity=1;ShowInTaskbar=true;
+        var area=Screen.PrimaryScreen.WorkingArea;Location=new Point(area.Left+Math.Max(0,(area.Width-Width)/2),area.Top+Math.Max(0,(area.Height-Height)/2));
+        status.Text=UiText.Get("Сайт CapCut требует подтверждения. Завершите его вручную.");WriteStatus("interaction_required","");Show();Activate();
     }
 
     async Task RequestGrant() {
@@ -217,6 +272,12 @@ internal sealed class LoginWindow : Form {
                 File.WriteAllBytes(pendingSession, ProtectedData.Protect(Encoding.UTF8.GetBytes(json.Serialize(session)), null, DataProtectionScope.CurrentUser));
                 if (File.Exists(sessionPath)) File.Replace(pendingSession, sessionPath, null);
                 else File.Move(pendingSession, sessionPath);
+                // Managed slots let the launcher perform the launch and journal
+                // the official account; browser sign-in only saves this slot.
+                if(Environment.GetEnvironmentVariable("CAPCUT_MANAGED_PROFILE")=="1" || Environment.GetEnvironmentVariable("CAPCUT_AUTO_START")=="0") {
+                    WriteStatus("verified","");
+                    status.Text=UiText.Get("Вход подтверждён");await Task.Delay(500);Close();return;
+                }
                 string previous;
                 using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Bytedance\CapCut\Account")) {
                     previous = key.GetValue("user_info") as string;
@@ -271,6 +332,7 @@ internal sealed class LoginWindow : Form {
         busy = false; transfer.Enabled = IsReadyPage();
         status.Text = UiText.Get("Вход пока не завершён: ") + stage + " — " + code;
         WriteStatus(stage, code);
+        if(backgroundLogin&&!interactionRequired){automaticTimer.Stop();Environment.ExitCode=4;Close();}
     }
     void WriteStatus(string phase, string code) {
         // Allowlisted status metadata only: no tokens, identifiers, responses or cookies.
@@ -288,6 +350,6 @@ internal sealed class LoginWindow : Form {
             return String.IsNullOrEmpty(version) ? 3 : 0;
         }
         Application.Run(new LoginWindow(Path.GetFullPath(args[0])));
-        return 0;
+        return Environment.ExitCode;
     }
 }

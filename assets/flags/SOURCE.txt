@@ -1,0 +1,3 @@
+Country flags from https://flagcdn.com/
+Names: https://flagcdn.com/en/codes.json and https://flagcdn.com/ru/codes.json
+Flags are bundled locally; no runtime requests.

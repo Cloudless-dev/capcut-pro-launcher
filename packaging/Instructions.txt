@@ -1,110 +1,54 @@
-CAPCUT LAUNCHER • 0.02
+CAPCUT LAUNCHER 0.054 — WINDOWS
 
-IMPORTANT: USE AT YOUR OWN RISK
-This is an unofficial third-party tool, not affiliated with CapCut/ByteDance.
-You choose to change local settings and the way your sign-in session is passed
-to the desktop app, and accept the associated risks. Errors, sign-in resets,
-data loss, account restrictions or suspension by the service may occur.
-Compatibility and account safety are not guaranteed. The author/distributor
-accepts no responsibility for service actions affecting your account, data loss
-or other consequences of using this tool. Back up important projects and make
-sure you can recover your account through the official sign-in process.
+Start
+Run CapCut-Launcher-0.054-Windows-x64.exe, or extract the ZIP and open
+CapCut Launcher.exe inside the extracted folder. Keep all ZIP contents together.
+The single EXE extracts its bundled files locally on first launch.
+Install the official CapCut app first. Node.js and Python are not required.
+Microsoft WebView2 is required; its official installer is included if needed.
 
-Getting started
-1. Install CapCut. If you have never opened it, launch it once, wait for its
-   home screen, then close it completely so its initial files are created.
-2. Extract the entire ZIP into a writable folder, such as Documents.
-   Do not run it from inside the ZIP or move the EXE on its own.
-3. Open CapCut Launcher.exe. Administrator access is usually not required.
-4. CapCut is detected automatically. Find CapCut repeats the search.
-   If needed, use Browse to select CapCut.exe from your installed version.
-5. Choose a region: US — United States or NL — Netherlands.
-6. For your first sign-in, choose Sign in with email, then Continue with email
-   on the CapCut website. Enter your credentials yourself. Once the service
-   verifies your session, the desktop app will open.
-7. For later launches, use Launch CapCut in the launcher. The ordinary CapCut
-   shortcut does not load the session helper.
-8. Use Русский / English in the main window to switch languages.
-   Your choice is saved. Help opens in the selected language.
+Profiles
+Current CapCut account uses the account already signed in through CapCut.
+It can also open CapCut while signed out so you can sign in inside the app.
+Add profile creates a separate browser session.
+Automatic sign-in on: enter your CapCut email and password in the launcher.
+The browser runs in the background. Verification may require a visible window.
+Automatic sign-in off: the CapCut sign-in website opens for manual sign-in.
+Launch after sign-in is a separate setting, enabled by default.
+Close CapCut before switching profiles or regions. Keep the launcher running.
+Choose a country from the flag list. Region does not change your IP address.
+Paid features and export require the subscription accepted by CapCut.
 
-Features
-— Pro catalog visibility and region selection (US/NL).
-— Region settings applied to the local cache, registry and DeviceRegister,
-  with registry region values maintained while the app is running.
-— Email sign-in using the official CapCut website and server-verified sessions.
-— Included runtime components; a separate Python installation is not required.
-— Included official Microsoft WebView2 installer, offered if WebView2 is missing.
-  An internet connection is required for installation and sign-in.
+Projects
+Close CapCut before changing project files.
+Trash shows both launcher and CapCut trash without duplicate project IDs.
+Delete in My projects moves projects to launcher trash; they can be restored.
+Delete in Trash permanently removes selected projects and their matching CapCut
+trash entries. The Windows Recycle Bin is not used. This cannot be undone.
+External source media outside project folders is not removed.
+Export can include all local media or project files only. Missing media can
+prevent a full export. Cloud media is not downloaded. Import skips duplicate IDs.
+Symbolic links and junctions are rejected. Back up important projects.
 
-Subscription
-Showing Pro content does not provide a subscription. Paid features and exports
-require valid access from CapCut. Subscription and export responses are not
-modified. Changing the local region does not change your account country or IP.
+Settings and data
+Choose Russian, English or system language; light, gray, dark or system theme.
+Profiles, encrypted sessions and passwords are stored under
+%LOCALAPPDATA%\CapCutLauncher. Passwords and sessions use Windows DPAPI and
+belong to the current Windows user. Forget sign-in clears the selected profile's
+session, saved password and browser cookies. It does not delete projects.
+The download includes no account data. Authorisation uses official CapCut services.
+Click the version to check for Windows updates.
 
-Saved sign-in
-Settings, the separate sign-in browser profile and the Windows DPAPI-encrypted
-session are stored in %LOCALAPPDATA%\CapCutLauncher, outside the app folder.
-The ZIP contains no personal accounts, cookies, passwords or diagnostic logs.
-Sessions are tied to the current Windows user and cannot be transferred to
-another PC by copying files. Each user signs in to their own account.
+Compatibility
+Checked on Windows 11 Pro 25H2, build 26200.9711 x64; CapCut 9.6.0.4097.
+Other CapCut versions and a clean Windows installation have not been verified.
+Font category changes are currently disabled in the Windows version.
+The program is unsigned. Administrator access is normally not required.
+PowerShell execution policy is overridden only for the child process.
 
-If CapCut automatically resets sign-in, the saved copy is retained and checked
-with the server on the next launch. If it expires or is revoked, sign in again.
-After signing in, the button shows the email or account name returned by CapCut.
-For older sessions, the available native profile name is used. This is the
-saved account; session validity is verified when the desktop app starts.
-
-Forget sign-in removes the saved session, the launcher's entire browser profile
-(including cookies), and the local CapCut account entry. Close both CapCut and
-the sign-in window first. The next sign-in window starts without the previous
-account. Projects and your regular Chrome/Edge profiles are not affected.
-Signing out only inside CapCut does not erase the launcher's saved sign-in;
-the next launch may restore it. Closing the sign-in window updates the status;
-cancelling it is not treated as a successful sign-in.
-
-Help opens inside the launcher. Both English and Russian text files are also
-included for reading without running the application.
-
-Tested configuration — 21 October 2026
-Windows 11 Pro 25H2, OS build 26200.9711, x64 (AMD64).
-CapCut FileVersion: 9.6.0.4097; ProductVersion: 9.6.0.89fd5606.
-The original email sign-in and repeated US launch were tested on this PC.
-Other PCs and CapCut versions have not been tested separately. US and NL
-were used during development; available content and access depend on CapCut.
-Repeated sign-in persistence was checked for US, not separately for NL.
-
-Supported platform
-This build is for Windows 10/11 x64 with CapCut installed. It is not intended
-or tested for Windows ARM64, 32-bit Windows, macOS or Linux. CapCut or website
-updates may require changes to the launcher. Compatibility with every client
-version is not guaranteed.
-
-Troubleshooting
-PowerShell and permissions
-The launcher uses -ExecutionPolicy Bypass only for its child PowerShell process.
-No manual Set-ExecutionPolicy command is required. It does not change system
-execution policies, security settings or file permissions. Settings are written
-under HKCU\Software\Bytedance\CapCut and the current user's files; administrator
-access is usually unnecessary. HKLM is not modified. WebView2 installation
-uses Microsoft's installer after your confirmation.
-The launcher is not signed with a commercial publisher certificate. Windows
-may report an unknown publisher; verify the origin and contents of the ZIP.
-If an organization's Group Policy or AppLocker blocks PowerShell, its
-administrator must allow it. The launcher does not bypass those restrictions.
-
-Common issues
-— Close CapCut and the sign-in window completely, then try again.
-— Choose Check setup and verify the selected CapCut.exe.
-— Unexpected cache format: open CapCut normally once, then close it.
-  If the issue remains, that CapCut version may require adaptation.
-— WebView2 installation needs access to Microsoft servers.
-— If the server rejects your session, sign in again with email.
-
-Version history: 0.01 — first build; 0.02 — saved account display, full browser
-sign-in reset, built-in help and Russian/English interface.
-
-Updates
-Click the version in the upper-right corner. When an update is available,
-the launcher offers to download it and restarts after installation.
-Close CapCut and the sign-in window first. Account data is retained.
-The previous folder is kept with a .backup suffix; you may remove it later.
+Use at your own risk
+This unofficial utility is not affiliated with CapCut or ByteDance. Errors,
+crashes, lost sign-ins, data loss or account restrictions may occur. You are
+responsible for your account and use of the utility. The author/distributor
+accepts no responsibility for consequences. Keep project backups and access
+to the official account recovery method.

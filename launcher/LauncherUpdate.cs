@@ -11,6 +11,7 @@ using System.Web.Script.Serialization;
 
 internal sealed class LauncherUpdate {
     public string Version,Url,Hash;
+    internal string ChecksumsUrl;
     static WebClient Client(){
         ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
         var client=new WebClient();client.Encoding=Encoding.UTF8;
@@ -19,19 +20,10 @@ internal sealed class LauncherUpdate {
     }
     public static LauncherUpdate Find(){
         using(var client=Client()){
-            Dictionary<string,object> release;
-            try{release=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(client.DownloadString("https://api.github.com/repositories/1428167761/releases/latest"));}
-            catch(WebException ex){var response=ex.Response as HttpWebResponse;if(response!=null&&response.StatusCode==HttpStatusCode.NotFound)return null;throw;}
-            string tag=Convert.ToString(release["tag_name"]).TrimStart('v');
-            Version latest,current;
-            if(!System.Version.TryParse(tag,out latest)||!System.Version.TryParse(BuildVersion.Display,out current))throw new IOException("Invalid release version.");
-            if(latest<=current)return null;
-            string url=null,sums=null;
-            foreach(Dictionary<string,object> asset in (ArrayList)release["assets"]){
-                string name=Convert.ToString(asset["name"]);
-                if(name=="CapCut-Launcher-"+tag+"-Windows-x64.zip")url=Convert.ToString(asset["browser_download_url"]);
-                if(name=="SHA256SUMS.txt")sums=Convert.ToString(asset["browser_download_url"]);
-            }
+            var releases=new JavaScriptSerializer().Deserialize<ArrayList>(client.DownloadString("https://api.github.com/repositories/1428167761/releases?per_page=100"));
+            var selected=SelectWindowsRelease(releases);
+            if(selected==null)return null;
+            string tag=selected.Version,url=selected.Url,sums=selected.ChecksumsUrl;
             ValidateUrl(url);ValidateUrl(sums);
             string expected="CapCut-Launcher-"+tag+"-Windows-x64.zip",hash=null;
             foreach(string line in client.DownloadString(sums).Split('\n')){
@@ -42,7 +34,31 @@ internal sealed class LauncherUpdate {
             return new LauncherUpdate{Version=tag,Url=url,Hash=hash};
         }
     }
-    static void ValidateUrl(string value){Uri uri;if(!Uri.TryCreate(value,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="github.com"||!uri.AbsolutePath.Contains("/releases/download/"))throw new IOException("Invalid release download URL.");}
+    internal static LauncherUpdate SelectWindowsRelease(ArrayList releases){
+        Version current; if(!System.Version.TryParse(BuildVersion.Display,out current))throw new IOException("Invalid launcher version.");
+        LauncherUpdate selected=null;Version best=current;
+        foreach(var item in releases){
+            var release=item as Dictionary<string,object>;
+            if(release==null)continue;
+            object flag;
+            if((release.TryGetValue("draft",out flag)&&flag is bool&&(bool)flag)||(release.TryGetValue("prerelease",out flag)&&flag is bool&&(bool)flag))continue;
+            string tag=Convert.ToString(release["tag_name"]);
+            if(tag.StartsWith("windows-",StringComparison.OrdinalIgnoreCase))tag=tag.Substring(8);
+            tag=tag.TrimStart('v');Version version;
+            if(!System.Version.TryParse(tag,out version)||version<=best)continue;
+            object raw;if(!release.TryGetValue("assets",out raw)||!(raw is ArrayList))continue;
+            string url=null,sums=null;
+            foreach(Dictionary<string,object> asset in (ArrayList)raw){
+                string name=Convert.ToString(asset["name"]);
+                if(name=="CapCut-Launcher-"+tag+"-Windows-x64.zip")url=Convert.ToString(asset["browser_download_url"]);
+                if(name=="SHA256SUMS.txt")sums=Convert.ToString(asset["browser_download_url"]);
+            }
+            if(url==null||sums==null)continue;
+            ValidateUrl(url);ValidateUrl(sums);best=version;selected=new LauncherUpdate{Version=tag,Url=url,ChecksumsUrl=sums};
+        }
+        return selected;
+    }
+    static void ValidateUrl(string value){Uri uri;if(!Uri.TryCreate(value,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="github.com"||!uri.AbsolutePath.StartsWith("/Cloudless-dev/capcut-pro-launcher/releases/download/",StringComparison.Ordinal))throw new IOException("Invalid release download URL.");}
     public static string Download(LauncherUpdate update,string stateRoot){
         string folder=Path.Combine(stateRoot,"updates",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
         string archive=Path.Combine(folder,"update.zip");

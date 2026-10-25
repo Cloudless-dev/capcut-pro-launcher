@@ -1,37 +1,50 @@
 # CapCut Launcher
 
-Неофициальный лаунчер для удобного запуска CapCut с дополнительными функциями. Интерфейс на русском и английском.
+Неофициальный лаунчер для CapCut. Русский и английский интерфейс.
 
-- [Скачать для Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
-- [Скачать для macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — macOS 14+, Apple Silicon (M-серия). Intel пока не поддерживается.
+- [Windows 0.054 — скачать](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/windows-v0.054)
+- [macOS 0.054 — скачать](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — Apple Silicon, macOS 14+.
 
 ## Установка
 
-Сначала установите официальный CapCut и закройте его.
+Сначала установите официальный CapCut.
 
-**Windows:** распакуйте ZIP целиком и запустите `CapCut Launcher.exe`.
+**Windows:** запустите EXE или распакуйте ZIP целиком и откройте `CapCut Launcher.exe`.
+EXE сам распакует необходимые файлы. Если нужен WebView2, лаунчер предложит официальный установщик.
 
-**macOS:** откройте DMG и перенесите `CapCut Launcher.app` в «Программы».
+**macOS:** откройте DMG и перенесите приложение в «Программы».
+Если macOS блокирует запуск: попробуйте открыть приложение, затем нажмите
+«Всё равно открыть» в «Системные настройки → Конфиденциальность и безопасность».
 
-Если macOS блокирует запуск, попробуйте открыть приложение, затем перейдите в **Системные настройки → Конфиденциальность и безопасность → Всё равно открыть**.
+Добавьте профиль или используйте текущий аккаунт CapCut. Выберите регион и
+нажмите «Запустить CapCut». Автовход использует почту и пароль; без него откроется
+сайт для ручного входа. Запуск CapCut после авторизации настраивается отдельно.
 
-Добавьте профиль, войдите через браузер, выберите регион и запустите CapCut. [Подробнее о версии для Mac](macos/README.md).
+Доступны импорт, экспорт с материалами и корзина проектов. Очистка корзины
+удаляет проекты окончательно. Для платных функций нужна подписка CapCut.
+Категории шрифтов в Windows пока не изменяются.
 
-На Mac доступны вход по почте и паролю, текущий аккаунт CapCut и управление проектами: импорт, экспорт с материалами и корзина с восстановлением.
+Используйте на свой риск. Лаунчер не связан с ByteDance. Сохраняйте копии проектов.
 
-Для платных функций нужна действующая подписка CapCut.
+[Сборка Windows из исходников](launcher/README.md) · [Версия для Mac](macos/README.md)
 
 ## English
 
-An unofficial launcher for convenient CapCut startup with additional features. Russian and English interface.
+An unofficial CapCut launcher with Russian and English interface.
 
-- [Download for Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/latest)
-- [Download for macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — macOS 14+, Apple Silicon. No Intel build yet.
+- [Windows 0.054](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/windows-v0.054)
+- [macOS 0.054](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — Apple Silicon, macOS 14+.
 
-Install the official CapCut app first. On Windows, extract the ZIP and run `CapCut Launcher.exe`. On Mac, open the DMG and drag the app to Applications. Sign in through the browser, choose a region and launch CapCut.
+Install the official CapCut first. On Windows, run the EXE or extract the ZIP and
+open `CapCut Launcher.exe`. The EXE extracts its bundled files automatically.
+On macOS, open the DMG and move the app to Applications.
 
-If macOS blocks the app, try opening it, then go to **System Settings → Privacy & Security → Open Anyway**.
+Create a profile or use your current CapCut account. Choose a region and launch
+CapCut. Automatic sign-in uses email and password; manual sign-in opens the
+website. Launch after sign-in is a separate setting.
 
-On Mac, use email and password or your current CapCut account. Manage projects with import, export including media, and trash with restoration.
+Project import, media export and recoverable trash are available. Emptying trash
+permanently deletes projects. Paid features require a CapCut subscription.
+Windows font category changes are not enabled yet.
 
-Paid features require a valid CapCut subscription.
+Use at your own risk. Not affiliated with ByteDance. Back up important projects.

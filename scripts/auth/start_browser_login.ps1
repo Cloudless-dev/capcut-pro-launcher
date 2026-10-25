@@ -26,5 +26,9 @@ else { Remove-Item Env:\CAPCUT_AUTH_DIAGNOSTIC -ErrorAction SilentlyContinue }
 $browserProcess = Start-Process -FilePath $exe -ArgumentList ('"' + $root + '"') -WorkingDirectory $root -PassThru
 if ($WaitForExit) {
     $browserProcess.WaitForExit()
-    if ($browserProcess.ExitCode -ne 0) { throw "Browser helper exited: $($browserProcess.ExitCode)" }
+    if ($browserProcess.ExitCode -ne 0) {
+        $english = $env:CAPCUT_LANGUAGE -eq 'en'
+        $message = if ($english) { 'Sign-in failed. Check your email and password, or turn off automatic sign-in.' } else { 'Не удалось войти. Проверьте почту и пароль или выключите автоматический вход.' }
+        throw $message
+    }
 }

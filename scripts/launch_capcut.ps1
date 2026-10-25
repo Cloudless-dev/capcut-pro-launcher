@@ -75,6 +75,7 @@ if ($NoDiagnostics) {
     $statusTask = $helper.StandardOutput.ReadLineAsync()
     if ($statusTask.Wait(20000)) {
         if ($statusTask.Result -like 'SPAWNED *') {
+            Write-Output 'CAPCUT_LAUNCH_READY'
             Write-Host "CapCut запущен: $Region Pro. Без диагностики и новых копий."
             return
         }

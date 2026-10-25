@@ -44,10 +44,13 @@ def load_session():
         raise RuntimeError('Invalid saved CapCut session fields.')
     if config['sourceHost'] not in ('passport-api-sg.capcutapi.com', 'passport16-normal-us-ttp.capcutapi.us'):
         raise RuntimeError('Unsupported saved CapCut session domain.')
+    config['uid'] = str(session.get('uid', ''))
     return config
 
 
 def auth_source():
+    if os.environ.get('CAPCUT_USE_NATIVE_ACCOUNT') == '1':
+        return ''
     config = load_session()
     if config is None:
         return ''
@@ -57,22 +60,18 @@ def auth_source():
 
 def restore_account():
     """Restore the local profile only after the saved session passes server validation."""
+    from verify_capcut_session import checked
+    if os.environ.get('CAPCUT_USE_NATIVE_ACCOUNT') == '1':
+        # The official client owns this account and its sign-in flow. It must
+        # remain launchable when signed out, expired or temporarily offline.
+        # Server verification is a separate user-requested action.
+        return False
     session = load_session()
     if session is None:
+        if os.environ.get('CAPCUT_MANAGED_PROFILE') == '1':
+            raise RuntimeError('Sign in to this profile first.')
         return False
-    request = urllib.request.Request(
-        'https://' + session['sourceHost'] + '/passport/account/info/v2/?aid=359289&device_platform=windows',
-        headers={'Cookie': session['cookieHeader'], 'x-tt-token': session['xToken'],
-                 'sdk-version': '2', 'User-Agent': 'CapCut/9.6.0.4097 (Windows)'})
-    try:
-        with urllib.request.urlopen(request, timeout=12) as response:
-            result = json.load(response)
-    except Exception:
-        raise RuntimeError('Could not verify saved CapCut session. Check the connection and retry.') from None
-    user = result.get('data') or {}
-    if result.get('message') != 'success' and str(result.get('ret')) != '0':
-        raise RuntimeError('Saved CapCut session is no longer accepted. Sign in with Email Login.cmd.')
-
+    user = checked(session)
     def field(*names):
         return next((str(user[name]) for name in names if user.get(name) is not None and user[name] != ''), '')
 
@@ -85,7 +84,7 @@ def restore_account():
         except (OSError, ValueError, TypeError):
             previous = {}
         previous_uid = str(previous.get('uid', '0'))
-        if previous_uid not in ('', '0', uid):
+        if previous_uid not in ('', '0', uid) and os.environ.get('CAPCUT_MANAGED_PROFILE') != '1':
             raise RuntimeError('Saved browser session belongs to another account. Use Email Login.cmd.')
         profile = {
             'uid': uid, 'xToken': session['xToken'], 'csrfToken': session['csrfToken'],

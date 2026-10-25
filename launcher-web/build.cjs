@@ -1,0 +1,11 @@
+const esbuild = require('esbuild');
+const fs = require('node:fs');
+const path = require('node:path');
+const out=path.join(__dirname,'dist');
+fs.mkdirSync(out,{recursive:true});
+esbuild.buildSync({entryPoints:[path.join(__dirname,'src/main.tsx')],bundle:true,minify:true,outfile:path.join(out,'app.js'),target:'chrome110',jsx:'automatic',legalComments:'eof'});
+fs.copyFileSync(path.join(__dirname,'src/index.html'),path.join(out,'index.html'));
+fs.cpSync(path.join(__dirname,'../assets/icons'),path.join(out,'icons'),{recursive:true});
+fs.copyFileSync(path.join(__dirname,'../assets/launcher.png'),path.join(out,'launcher.png'));
+fs.cpSync(path.join(__dirname,'../assets/flags'),path.join(out,'flags'),{recursive:true});
+console.log('Launcher UI built');

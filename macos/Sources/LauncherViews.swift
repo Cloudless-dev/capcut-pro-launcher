@@ -22,6 +22,7 @@ struct LauncherRootView: View {
                         case "projects": ProjectsPage(model:model,manager:model.projects)
                         case "guide": GuidePage(model:model)
                         case "settings": SettingsPage(model:model)
+                        case "about": AboutPage(version:model.version)
                         default: ProfilesPage(model:model)
                         }
                     }.padding(.horizontal,V(28)).padding(.bottom,V(28)).padding(.top,V(8))
@@ -38,7 +39,7 @@ struct LauncherRootView: View {
         .onAppear { model.checkSelectedSession() }
     }
     var sidebar: some View {
-        VStack(alignment:.leading,spacing:V(30)) {
+        VStack(alignment:.leading,spacing:V(20)) {
             HStack(spacing:V(10)) {
                 Image(systemName:"play.rectangle.on.rectangle").font(.veil(size:25,weight:.medium)).foregroundStyle(palette.accent)
                 Text("Launcher").font(.veil(size:16,weight:.semibold))
@@ -48,6 +49,7 @@ struct LauncherRootView: View {
                 navigation("projects",title:L("Проекты"),icon:"folder")
                 navigation("guide",title:L("Инструкция"),icon:"book")
                 navigation("settings",title:L("Настройки"),icon:"gearshape")
+                navigation("about",title:L("О лаунчере"),icon:"info.circle")
             }
             Spacer(minLength:V(20))
             if let active = model.runningProfile {
@@ -86,7 +88,7 @@ struct LauncherRootView: View {
     }
     var header: some View {
         HStack(spacing:V(18)) {
-            Text(model.destination == "projects" ? L("Проекты") : model.destination == "settings" ? L("Настройки") : model.destination == "guide" ? L("Инструкция") : L("Профили"))
+            Text(model.destination == "projects" ? L("Проекты") : model.destination == "settings" ? L("Настройки") : model.destination == "guide" ? L("Инструкция") : model.destination == "about" ? L("О лаунчере") : L("Профили"))
                 .font(.veil(size:29,weight:.bold)).lineLimit(1)
             Spacer(minLength:V(0))
             if model.destination == "profiles" {

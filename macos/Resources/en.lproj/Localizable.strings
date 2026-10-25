@@ -345,3 +345,20 @@
 "Применить" = "Apply";
 "Регион сохранён. Применится при следующем запуске CapCut." = "Region saved. It will apply the next time CapCut starts.";
 "Регион профиля сохранён." = "Profile region saved.";
+
+"О лаунчере" = "About";
+"Независимый лаунчер для CapCut." = "An independent launcher for CapCut.";
+"Pro-интерфейс и регионы" = "Pro interface and regions";
+"Включает корректное отображение Pro-интерфейса и позволяет выбрать регион ресурсов CapCut." = "Enables correct display of the Pro interface and lets you choose the region for CapCut resources.";
+"Вход по почте и паролю" = "Email and password sign-in";
+"Добавляет прямой вход в аккаунт CapCut из профиля лаунчера и сохраняет отдельные браузерные сеансы." = "Adds direct CapCut sign-in from a launcher profile and keeps separate browser sessions.";
+"Удобное управление проектами" = "Convenient project management";
+"Показывает проекты с обложками. Позволяет импортировать, экспортировать, переносить и восстанавливать их из корзины лаунчера." = "Shows projects with covers. Import, export, move and restore them from the launcher trash.";
+"Поиск на русском языке" = "Russian-language search";
+"Исправляет кодировку русских поисковых запросов. Эффекты, переходы, стикеры, шаблоны и анимации текста можно искать на русском языке." = "Fixes the encoding of Russian search queries. Search for effects, transitions, stickers, templates and text animations in Russian.";
+"Ваши данные" = "Your data";
+"Профили, браузерные сеансы и проекты хранятся локально на вашем Mac. Пароли сохраняются в Связке ключей macOS." = "Profiles, browser sessions and projects are stored locally on your Mac. Passwords are saved in macOS Keychain.";
+"Для входа и работы CapCut данные передаются официальным сервисам CapCut. При выбранном входе через Google или Apple участвует соответствующий сервис авторизации. Проверка и загрузка обновлений выполняются через GitHub." = "Signing in and using CapCut sends data to official CapCut services. Google or Apple sign-in also uses the respective authentication service. Updates are checked and downloaded through GitHub.";
+"Перед использованием" = "Before you use the launcher";
+"Возможны ошибки, зависания и вылеты. Используйте лаунчер на свой риск: ответственность за аккаунт, сохранность проектов и последствия использования остаётся за вами. Делайте резервные копии важных проектов." = "Errors, freezes and crashes may occur. Use the launcher at your own risk: you remain responsible for your account, project safety and the consequences of use. Back up important projects.";
+"Лаунчер не связан с ByteDance и не гарантирует отсутствие ограничений аккаунта. Отображение Pro-интерфейса не заменяет подписку: доступ к платным функциям и экспорту определяет CapCut." = "The launcher is not affiliated with ByteDance and cannot guarantee that your account will remain unrestricted. Displaying the Pro interface does not replace a subscription: CapCut determines access to paid features and export.";

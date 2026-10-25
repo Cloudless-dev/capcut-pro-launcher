@@ -50,7 +50,7 @@ final class LauncherApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func settings() { model.destination = "settings"; showWindow() }
     @objc func guide() { model.destination = "guide"; showWindow() }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true) }
-    @objc func about() { showWindow(); AppDialogs.shared.notice("CapCut Launcher \(model.version)","Профили, вход через браузер и выбор региона.\nНезависимый лаунчер для официального CapCut.") }
+    @objc func about() { model.destination = "about"; showWindow() }
     func applicationShouldTerminate(_ sender:NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
         if model.projects.working {

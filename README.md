@@ -16,13 +16,6 @@
 
 Добавьте профиль, выберите регион и нажмите «Запустить CapCut».
 
-## Исходники
-
-- [launcher](launcher/) — логика Windows-приложения.
-- [launcher-web](launcher-web/) — интерфейс Windows-приложения.
-- [macos](macos/) — версия для Mac.
-- [Сборка Windows](launcher/README.md) · [Сборка macOS](macos/README.md#сборка).
-
 ## English
 
 A CapCut launcher with profiles, email sign-in, region selection and project management.

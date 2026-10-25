@@ -1,54 +1,16 @@
-CAPCUT LAUNCHER 0.054 — WINDOWS
+CAPCUT LAUNCHER — WINDOWS
 
-Start
-Run CapCut-Launcher-0.054-Windows-x64.exe, or extract the ZIP and open
-CapCut Launcher.exe inside the extracted folder. Keep all ZIP contents together.
-The single EXE extracts its bundled files locally on first launch.
-Install the official CapCut app first. Node.js and Python are not required.
-Microsoft WebView2 is required; its official installer is included if needed.
+EXE installer: download and install the launcher.
+ZIP: extract the archive, then open CapCut Launcher.exe.
+Install the official CapCut app first.
 
-Profiles
-Current CapCut account uses the account already signed in through CapCut.
-It can also open CapCut while signed out so you can sign in inside the app.
-Add profile creates a separate browser session.
-Automatic sign-in on: enter your CapCut email and password in the launcher.
-The browser runs in the background. Verification may require a visible window.
-Automatic sign-in off: the CapCut sign-in website opens for manual sign-in.
-Launch after sign-in is a separate setting, enabled by default.
-Close CapCut before switching profiles or regions. Keep the launcher running.
-Choose a country from the flag list. Region does not change your IP address.
-Paid features and export require the subscription accepted by CapCut.
+Add a profile or choose your current CapCut account.
+Automatic sign-in on: enter email and password in the launcher.
+Automatic sign-in off: sign in through the website window.
+Choose a region and click Launch CapCut.
+Close CapCut before switching profiles.
 
-Projects
-Close CapCut before changing project files.
-Trash shows both launcher and CapCut trash without duplicate project IDs.
-Delete in My projects moves projects to launcher trash; they can be restored.
-Delete in Trash permanently removes selected projects and their matching CapCut
-trash entries. The Windows Recycle Bin is not used. This cannot be undone.
-External source media outside project folders is not removed.
-Export can include all local media or project files only. Missing media can
-prevent a full export. Cloud media is not downloaded. Import skips duplicate IDs.
-Symbolic links and junctions are rejected. Back up important projects.
+Import, export and trash are in Projects.
+Language, theme and launch after sign-in are in Settings.
 
-Settings and data
-Choose Russian, English or system language; light, gray, dark or system theme.
-Profiles, encrypted sessions and passwords are stored under
-%LOCALAPPDATA%\CapCutLauncher. Passwords and sessions use Windows DPAPI and
-belong to the current Windows user. Forget sign-in clears the selected profile's
-session, saved password and browser cookies. It does not delete projects.
-The download includes no account data. Authorisation uses official CapCut services.
-Click the version to check for Windows updates.
-
-Compatibility
-Checked on Windows 11 Pro 25H2, build 26200.9711 x64; CapCut 9.6.0.4097.
-Other CapCut versions and a clean Windows installation have not been verified.
-Font category changes are currently disabled in the Windows version.
-The program is unsigned. Administrator access is normally not required.
-PowerShell execution policy is overridden only for the child process.
-
-Use at your own risk
-This unofficial utility is not affiliated with CapCut or ByteDance. Errors,
-crashes, lost sign-ins, data loss or account restrictions may occur. You are
-responsible for your account and use of the utility. The author/distributor
-accepts no responsibility for consequences. Keep project backups and access
-to the official account recovery method.
+Unofficial application. Use at your own risk and back up important projects.

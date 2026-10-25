@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import zipfile
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 if not (ROOT/'launcher-web/dist/index.html').is_file():
@@ -151,12 +152,5 @@ lines = sums.read_text('ascii').splitlines() if sums.exists() else []
 lines = [line for line in lines if not line.endswith('  ' + ARCHIVE.name) and not line.endswith(' *' + ARCHIVE.name)]
 sums.write_text('\n'.join(lines + [checksum + '  ' + ARCHIVE.name]) + '\n', encoding='ascii')
 
-# Single-file download: embed the exact ZIP, extract into a versioned local cache.
-exe = ARCHIVE.with_suffix('.exe')
-source = ROOT/'local/portable-exe-generated.cs'
-source.write_text((ROOT/'packaging/PortableExe.cs').read_text('utf-8').replace('__VERSION__', VERSION).replace('__ARCHIVE_SHA256__', checksum), encoding='utf-8-sig')
-subprocess.run([str(compiler), '/nologo', '/codepage:65001', '/langversion:5', '/target:winexe', '/platform:x64', '/reference:System.Windows.Forms.dll', '/reference:System.Web.Extensions.dll', '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll', '/win32icon:'+str(ROOT/'assets/launcher.ico'), '/resource:'+str(ARCHIVE)+',payload.zip', '/out:'+str(exe), str(source)],check=True)
-subprocess.run([str(exe),'--check-only'],check=True)
-exe_hash=hashlib.sha256(exe.read_bytes()).hexdigest()
-sums.write_text(checksum+'  '+ARCHIVE.name+'\n'+exe_hash+'  '+exe.name+'\n',encoding='ascii')
-print('RELEASE_EXE',exe)
+# Small setup downloads the exact portable ZIP.
+subprocess.run([sys.executable, str(ROOT/'packaging/build_installer.py')], check=True)

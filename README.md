@@ -2,8 +2,8 @@
 
 Неофициальный лаунчер для CapCut. Русский и английский интерфейс.
 
-- [Windows 0.054 — скачать](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/windows-v0.054)
-- [macOS 0.054 — скачать](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — Apple Silicon, macOS 14+.
+- [Windows — скачать](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/windows-v0.054)
+- [macOS — скачать](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — Apple Silicon, macOS 14+.
 
 ## Установка
 
@@ -32,8 +32,8 @@ EXE сам распакует необходимые файлы. Если нуж
 
 An unofficial CapCut launcher with Russian and English interface.
 
-- [Windows 0.054](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/windows-v0.054)
-- [macOS 0.054](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — Apple Silicon, macOS 14+.
+- [Windows](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/windows-v0.054)
+- [macOS](https://github.com/Cloudless-dev/capcut-pro-launcher/releases/tag/macos-v0.054) — Apple Silicon, macOS 14+.
 
 Install the official CapCut first. On Windows, run the EXE or extract the ZIP and
 open `CapCut Launcher.exe`. The EXE extracts its bundled files automatically.

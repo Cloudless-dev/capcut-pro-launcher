@@ -16,6 +16,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from font_support import font_bridge_config
 
 
 def emit(kind, **fields):
@@ -197,6 +198,7 @@ def start(config):
         session=device.attach('Gadget')
         agent_config={'region':region,'session':config.get('session'),'profileBase64':profile,'nativeAuth':native_auth,
                       'userAgent':user_agent,'showProUI':config.get('showProUI',True),'probe':config.get('probe',False)}
+        agent_config['fonts'] = font_bridge_config(app)
         code='globalThis.LAUNCH_CONFIG='+json.dumps(agent_config)+';\n'+(resources/'agent.js').read_text()
         script=session.create_script(code);errors=[];ready=set()
         def message(item,data):

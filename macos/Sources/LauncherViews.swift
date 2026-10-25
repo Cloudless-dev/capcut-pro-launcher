@@ -445,6 +445,11 @@ struct GuidePage: View {
                 Text(L("В разделе «Проекты» доступны обложки, импорт, экспорт, перенос и удаление выбранных или всех проектов. Для операций полностью закройте CapCut. Удалённые проекты сохраняются в корзине лаунчера и восстанавливаются кнопкой «Восстановить». Очистка отправляет их в системную Корзину macOS. В экспорте выберите «Со всеми материалами», чтобы собрать исходники и обновить связи, или «Только проект», чтобы оставить прежние пути."))
                     .font(.veil(size:12)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             }.surface()
+            VStack(alignment:.leading,spacing:V(12)) {
+                Label(L("Категории шрифтов"),systemImage:"textformat").font(.veil(size:14,weight:.semibold))
+                Text(L("В окне выбора шрифта CapCut используйте категории «Русский» и «Английский». В «Все» доступен полный список. Также доступны «Классика», «Новое», «Ретро» и «Хиты». Категории появляются при запуске поддерживаемой версии CapCut через лаунчер."))
+                    .font(.veil(size:12)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            }.surface()
             Text(L("Pro-интерфейс включён при каждом запуске. Подписку и разрешение экспорта проверяет CapCut. Лаунчер — независимое приложение."))
                 .font(.veil(size:11)).foregroundStyle(.secondary).padding(.horizontal,V(4))
         }

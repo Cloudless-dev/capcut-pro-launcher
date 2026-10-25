@@ -304,5 +304,103 @@ Process.attachModuleObserver({onAdded(module) {
   }});
   emit('cronet_ready');
 }});
+// Use CapCut's own category selector and resource lists. The bridge is optional:
+// unsupported binaries keep their native font picker without blocking launch.
+Process.attachModuleObserver({onAdded(module) {
+  if(module.name!=='libVECreator.dylib'||!cfg.fonts)return;
+  try {
+    const addresses={};
+    for(const key of ['gate','categories','copy','destroy','refresh','clear','property']) {
+      const spec=cfg.fonts[key];
+      if(!spec||!Number.isSafeInteger(spec.offset)||spec.offset<0||spec.offset>=module.size||
+          !/^[0-9a-f]{32}$/.test(spec.prefix))throw Error('Unsupported font bridge');
+      const address=module.base.add(spec.offset);
+      const bytes=new Uint8Array(address.readByteArray(16));
+      if(Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')!==spec.prefix)throw Error('Font bridge changed');
+      addresses[key]=address;
+    }
+    const allocateAt=Module.findGlobalExportByName('_Znwm'),releaseAt=Module.findGlobalExportByName('_ZdlPv');
+    if(!allocateAt||!releaseAt)throw Error('Font allocator unavailable');
+    const allocate=new NativeFunction(allocateAt,'pointer',['uint64']);
+    const dispose=new NativeFunction(releaseAt,'void',['pointer']);
+    const copy=new NativeFunction(addresses.copy,'void',['pointer','pointer']);
+    const destroy=new NativeFunction(addresses.destroy,'void',['pointer']);
+    const clearCategories=new NativeFunction(addresses.clear,'void',['pointer']);
+    const views=new Map();
+    const order=['Classic1','NEW','Retro-1','大热','russian','english'];
+    const entrySize=144;
+    function nativeString(at) {
+      const tag=at.add(23).readU8(),length=tag&128?Number(at.add(8).readU64()):tag;
+      if(length<0||length>400)throw Error('Invalid font category');
+      return length?(tag&128?at.readPointer():at).readUtf8String(length):'';
+    }
+    function vector(at,size,maximum) {
+      const begin=at.readPointer(),end=at.add(8).readPointer();
+      const bytes=Number(end.sub(begin));
+      if(bytes<0||bytes%size||bytes>size*maximum)throw Error('Invalid font vector');
+      return {begin,bytes,count:bytes/size};
+    }
+    function hashBytes(hash,bytes) {
+      for(const byte of bytes)hash=Math.imul(hash^byte,16777619)>>>0;
+      return hash;
+    }
+    Interceptor.attach(addresses.categories,{onLeave(result) {
+      try {
+        if(result.isNull())return;
+        const source=vector(result,entrySize,200);
+        if(!source.count)return;
+        const categories=new Map();
+        for(let i=0;i<source.count;i++) {
+          const item=source.begin.add(i*entrySize);
+          const name=nativeString(item.add(8)),key=nativeString(item.add(32));
+          if(!name||!key)throw Error('Font category layout changed');
+          if(order.includes(key))categories.set(key,item);
+        }
+        if(!categories.has('russian')||!categories.has('english'))return;
+        const selected=order.filter(key=>categories.has(key));
+        const data=Memory.alloc(selected.length*entrySize),borrowed=Memory.alloc(24);
+        let hash=2166136261;
+        for(let i=0;i<selected.length;i++) {
+          const item=categories.get(selected[i]);
+          const bytes=item.readByteArray(entrySize);
+          data.add(i*entrySize).writeByteArray(bytes);
+          hash=hashBytes(hash,new Uint8Array(bytes));
+          const fonts=vector(item.add(120),16,20000);
+          if(fonts.bytes)hash=hashBytes(hash,new Uint8Array(fonts.begin.readByteArray(fonts.bytes)));
+        }
+        const end=data.add(selected.length*entrySize);
+        borrowed.writePointer(data);borrowed.add(8).writePointer(end);borrowed.add(16).writePointer(end);
+        const id=result.toString(),previous=views.get(id);
+        if(previous&&previous.hash===hash) {result.replace(previous.header);return;}
+        // Deep-copy using the installed binary's own C++ constructors: category
+        // strings and resource shared_ptrs retain their normal ownership.
+        const header=allocate(24);copy(header,borrowed);
+        if(previous) {
+          const old=previous.header.readByteArray(24);
+          previous.header.writeByteArray(header.readByteArray(24));header.writeByteArray(old);
+          destroy(header);dispose(header);previous.hash=hash;result.replace(previous.header);
+        }else {
+          // Native callers can retain a reference to this vector. Its header
+          // lives in the editor's heap until process exit, including on detach.
+          views.set(id,{header,hash});result.replace(header);
+        }
+        emit('font_categories_filtered',{count:selected.length+1});
+      }catch(_) {emit('font_categories_unavailable');}
+    }});
+    // The first popup can precede the asynchronous font response. CapCut then
+    // caches just "All" and skips rebuilding it, even after resources arrive.
+    // Clear that incomplete owning QList before its normal refresh; the native
+    // function rebuilds it and emits its usual notification on the UI thread.
+    Interceptor.attach(addresses.refresh,{onEnter(args){
+      try {
+        const model=args[0];
+        if(model.add(0x208).readU8()===1 && model.add(0x328).readS64().toNumber()===1)
+          clearCategories(model.add(0x318));
+      }catch(_) {emit('font_categories_unavailable');}
+    }});
+    Interceptor.attach(addresses.gate,{onLeave(result){result.replace(1);}});
+    emit('font_categories_ready');
+  }catch(_) {emit('font_categories_unavailable');}
+}});
 rpc.exports={status(){return {profileSeen,regionReads,sessionActive};}};
 emit('agent_ready',{arch:Process.arch,region:target.toUpperCase()});
